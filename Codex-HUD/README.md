@@ -17,6 +17,13 @@ cd codex-hud
 ./install.sh
 ```
 
+Guided install:
+```bash
+./install.sh --interactive
+```
+
+Re-running `./install.sh` after patch updates will now refresh the previously applied Codex patch automatically before rebuilding.
+
 ## Supported Environment
 - Target: HUD harness for Codex CLI on Linux
 - OS: Linux (Ubuntu/Debian, Fedora/RHEL, Arch, openSUSE)
@@ -41,7 +48,7 @@ Changes do not appear in already-running Codex sessions.
 Verification commands:
 ```bash
 grep -n "status_line_command" ~/.codex/config.toml
-cd ~/codex-hud && node dist/index.js --status-line --once --no-clear
+node ~/codex-hud/Codex-HUD/dist/index.js --status-line --once --no-clear --cwd "$PWD"
 ```
 
 ## Commands
@@ -71,6 +78,29 @@ NO_COLOR=1 codex                 # Disable HUD colors
 FORCE_COLOR=1 codex              # Force-enable HUD colors
 FORCE_COLOR=0 codex              # Force-disable HUD colors
 ```
+
+## Configuration
+Optional config lives at `~/.codex-hud/config.json`.
+
+Example:
+```json
+{
+  "preset": "essential",
+  "lineLayout": "expanded",
+  "pathLevels": 2,
+  "showTools": true,
+  "showPlan": true,
+  "showGitAheadBehind": true,
+  "showGitFileStats": false,
+  "contextDisplay": "both",
+  "sevenDayThreshold": 80
+}
+```
+
+Presets:
+- `minimal`: compact single-line HUD, no tools/todos
+- `essential`: balanced default
+- `full`: expanded layout with richer git/session detail
 
 ## Example HUD Line
 ```text

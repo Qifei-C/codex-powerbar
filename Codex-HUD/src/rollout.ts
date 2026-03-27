@@ -17,6 +17,15 @@ interface ParsedRateWindows {
   secondary?: { usedPercent: number; resetsAt?: Date; windowMinutes?: number };
 }
 
+interface SessionCacheEntry {
+  rolloutPath: string;
+}
+
+interface SessionIndexCache {
+  version: 1;
+  sessions: Record<string, SessionCacheEntry>;
+}
+
 function toDate(value: unknown): Date | undefined {
   if (typeof value !== 'string') return undefined;
   const d = new Date(value);
@@ -86,18 +95,78 @@ function isSparkLimit(raw: ParsedRateWindows): boolean {
   return false;
 }
 
-export async function findLatestRollout(codexHome?: string): Promise<string | null> {
-  const home = codexHome ?? path.join(os.homedir(), '.codex');
-  const sessionsDir = path.join(home, 'sessions');
+function hudDir(): string {
+  return path.join(os.homedir(), '.codex-hud');
+}
 
-  if (!fs.existsSync(sessionsDir)) {
-    return null;
+function sessionIndexPath(): string {
+  return path.join(hudDir(), 'session-index.json');
+}
+
+function readSessionIndex(): SessionIndexCache {
+  const file = sessionIndexPath();
+  if (!fs.existsSync(file)) {
+    return { version: 1, sessions: {} };
   }
 
-  let latestPath: string | null = null;
-  let latestMtime = 0;
+  try {
+    const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as Partial<SessionIndexCache>;
+    if (raw.version === 1 && raw.sessions && typeof raw.sessions === 'object') {
+      return {
+        version: 1,
+        sessions: Object.fromEntries(
+          Object.entries(raw.sessions).filter(([, value]) =>
+            value && typeof value === 'object' && typeof value.rolloutPath === 'string'
+          ),
+        ) as Record<string, SessionCacheEntry>,
+      };
+    }
+  } catch {
+    // noop
+  }
 
+  return { version: 1, sessions: {} };
+}
+
+function writeSessionIndex(cache: SessionIndexCache): void {
+  const dir = hudDir();
+  const file = sessionIndexPath();
+
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(cache, null, 2), 'utf8');
+  } catch {
+    // noop
+  }
+}
+
+function readSessionMeta(rolloutPath: string): { sessionId?: string; cwd?: string } {
+  try {
+    const raw = fs.readFileSync(rolloutPath, 'utf8');
+    for (const line of raw.split('\n')) {
+      if (!line.trim()) continue;
+      const item = JSON.parse(line) as RolloutLine;
+      if (item.type !== 'session_meta' || !item.payload || typeof item.payload !== 'object') {
+        continue;
+      }
+
+      const payload = item.payload as { id?: unknown; cwd?: unknown };
+      return {
+        sessionId: typeof payload.id === 'string' ? payload.id : undefined,
+        cwd: typeof payload.cwd === 'string' ? payload.cwd : undefined,
+      };
+    }
+  } catch {
+    // noop
+  }
+
+  return {};
+}
+
+function collectRolloutFiles(sessionsDir: string): Array<{ path: string; mtimeMs: number }> {
+  const files: Array<{ path: string; mtimeMs: number }> = [];
   const stack = [sessionsDir];
+
   while (stack.length > 0) {
     const dir = stack.pop();
     if (!dir) continue;
@@ -121,19 +190,89 @@ export async function findLatestRollout(codexHome?: string): Promise<string | nu
       }
 
       try {
-        const stat = fs.statSync(full);
-        const mtime = stat.mtimeMs;
-        if (mtime > latestMtime) {
-          latestMtime = mtime;
-          latestPath = full;
-        }
+        files.push({ path: full, mtimeMs: fs.statSync(full).mtimeMs });
       } catch {
         // noop
       }
     }
   }
 
-  return latestPath;
+  files.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return files;
+}
+
+export async function findLatestRollout(codexHome?: string): Promise<string | null> {
+  const home = codexHome ?? path.join(os.homedir(), '.codex');
+  const sessionsDir = path.join(home, 'sessions');
+
+  if (!fs.existsSync(sessionsDir)) {
+    return null;
+  }
+
+  return collectRolloutFiles(sessionsDir)[0]?.path ?? null;
+}
+
+export async function findRolloutForSession(
+  sessionId: string,
+  codexHome?: string,
+  cwdHint?: string,
+): Promise<string | null> {
+  const home = codexHome ?? path.join(os.homedir(), '.codex');
+  const sessionsDir = path.join(home, 'sessions');
+  if (!sessionId || !fs.existsSync(sessionsDir)) {
+    return null;
+  }
+
+  const cache = readSessionIndex();
+  const cachedPath = cache.sessions[sessionId]?.rolloutPath;
+  if (cachedPath && fs.existsSync(cachedPath)) {
+    const cachedMeta = readSessionMeta(cachedPath);
+    if (cachedMeta.sessionId === sessionId) {
+      return cachedPath;
+    }
+  }
+
+  const files = collectRolloutFiles(sessionsDir);
+  let fallbackMatch: string | null = null;
+
+  for (const file of files) {
+    const meta = readSessionMeta(file.path);
+    if (meta.sessionId !== sessionId) {
+      continue;
+    }
+
+    cache.sessions[sessionId] = { rolloutPath: file.path };
+    writeSessionIndex(cache);
+
+    if (!cwdHint || meta.cwd === cwdHint) {
+      return file.path;
+    }
+    fallbackMatch = fallbackMatch ?? file.path;
+  }
+
+  return fallbackMatch;
+}
+
+export async function findLatestRolloutForCwd(cwdHint: string, codexHome?: string): Promise<string | null> {
+  const home = codexHome ?? path.join(os.homedir(), '.codex');
+  const sessionsDir = path.join(home, 'sessions');
+  if (!cwdHint || !fs.existsSync(sessionsDir)) {
+    return null;
+  }
+
+  for (const file of collectRolloutFiles(sessionsDir)) {
+    const meta = readSessionMeta(file.path);
+    if (meta.cwd === cwdHint) {
+      if (meta.sessionId) {
+        const cache = readSessionIndex();
+        cache.sessions[meta.sessionId] = { rolloutPath: file.path };
+        writeSessionIndex(cache);
+      }
+      return file.path;
+    }
+  }
+
+  return null;
 }
 
 export async function buildSnapshot(rolloutPath: string): Promise<HudSnapshot> {
@@ -182,6 +321,12 @@ export async function buildSnapshot(rolloutPath: string): Promise<HudSnapshot> {
 
     if (type === 'session_meta' && !snapshot.sessionStart) {
       snapshot.sessionStart = at;
+      if (payload && typeof payload === 'object') {
+        const meta = payload as { id?: unknown; cli_version?: unknown; cwd?: unknown };
+        if (typeof meta.id === 'string') snapshot.sessionId = meta.id;
+        if (typeof meta.cli_version === 'string') snapshot.cliVersion = meta.cli_version;
+        if (!snapshot.cwd && typeof meta.cwd === 'string') snapshot.cwd = meta.cwd;
+      }
       continue;
     }
 
@@ -254,6 +399,7 @@ export async function buildSnapshot(rolloutPath: string): Promise<HudSnapshot> {
       const tool: ToolActivity = {
         id,
         label: simplifyCommand(event.command),
+        source: 'exec',
         status: 'running',
         startTime: at,
       };
@@ -275,6 +421,7 @@ export async function buildSnapshot(rolloutPath: string): Promise<HudSnapshot> {
         allTools.push({
           id,
           label: simplifyCommand(event.command),
+          source: 'exec',
           status,
           startTime: at,
           endTime: at,
@@ -293,7 +440,7 @@ export async function buildSnapshot(rolloutPath: string): Promise<HudSnapshot> {
           label = `${iv.server}/${iv.tool}`;
         }
       }
-      const tool: ToolActivity = { id, label, status: 'running', startTime: at };
+      const tool: ToolActivity = { id, label, source: 'mcp', status: 'running', startTime: at };
       running.set(id, tool);
       allTools.push(tool);
       continue;
@@ -315,6 +462,12 @@ export async function buildSnapshot(rolloutPath: string): Promise<HudSnapshot> {
   const git = await getGitInfo(snapshot.cwd);
   snapshot.gitBranch = git.branch;
   snapshot.gitDirty = git.dirty;
+  snapshot.gitAhead = git.ahead;
+  snapshot.gitBehind = git.behind;
+  snapshot.gitModified = git.modified;
+  snapshot.gitAdded = git.added;
+  snapshot.gitDeleted = git.deleted;
+  snapshot.gitUntracked = git.untracked;
 
   const ordered = allTools.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
   snapshot.activeTools = ordered.filter((t) => t.status === 'running').slice(-10);

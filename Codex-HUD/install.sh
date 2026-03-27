@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
+trap 'echo ""; echo "[install] Interrupted"; exit 130' INT TERM
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PATCH_FILE="$REPO_DIR/patches/codex-statusline-command.patch"
 INSTALL_BIN_DIR="$HOME/.local/bin"
+PATCH_STATE_DIR_NAME=".codex-hud"
+PATCH_STATE_FILE_NAME="applied-statusline-command.patch"
+INTERACTIVE=1
+ACTION="full"
+CODEX_REPO_OVERRIDE=""
+FAST_BUILD=0
 
 print_step() {
   printf '\n[install] %s\n' "$1"
@@ -12,6 +19,60 @@ print_step() {
 fatal() {
   echo "[install] ERROR: $1" >&2
   exit 1
+}
+
+print_usage() {
+  cat <<'USAGE'
+Usage: ./install.sh [--full] [--fast] [--tmux] [--uninstall] [--help]
+
+Modes:
+  default            Interactive guided setup (recommended)
+  --full             One-shot full install without prompts
+  --fast             Use faster Rust build profile (thin LTO, parallel codegen)
+  --tmux             Lightweight install: HUD via tmux status bar (no Codex rebuild)
+  --uninstall        Remove patched codex binary, restore config, clean PATH entries
+
+Interactive choices:
+  1. Full install                 Build HUD, patch/build Codex, update config
+  2. Build HUD only               Rebuild local dist/
+  3. Build HUD + update config    Rebuild HUD and wire status_line_command
+  4. Patch/build Codex only       Rebuild patched codex binary
+  5. tmux HUD                     Build HUD + enable tmux status bar (no Codex rebuild)
+USAGE
+}
+
+prompt_with_default() {
+  local prompt="$1"
+  local default_value="${2:-}"
+  local reply
+
+  if [[ -n "$default_value" ]]; then
+    read -r -p "$prompt [$default_value]: " reply
+    if [[ -z "$reply" ]]; then
+      reply="$default_value"
+    fi
+  else
+    read -r -p "$prompt: " reply
+  fi
+
+  printf '%s\n' "$reply"
+}
+
+confirm_prompt() {
+  local prompt="$1"
+  local default_answer="${2:-Y}"
+  local reply
+  local suffix="[Y/n]"
+  if [[ "$default_answer" =~ ^[Nn]$ ]]; then
+    suffix="[y/N]"
+  fi
+
+  read -r -p "$prompt $suffix " reply
+  if [[ -z "$reply" ]]; then
+    reply="$default_answer"
+  fi
+
+  [[ "$reply" =~ ^[Yy]$ ]]
 }
 
 ensure_command() {
@@ -94,7 +155,7 @@ ensure_local_bin_precedence() {
   local marker_start="# >>> codex-hud path >>>"
   local marker_end="# <<< codex-hud path <<<"
   local line='export PATH="$HOME/.local/bin:$PATH"'
-  local rc_files=("$HOME/.bashrc" "$HOME/.zshrc")
+  local rc_files=("$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile" "$HOME/.bash_profile")
 
   for rc in "${rc_files[@]}"; do
     if [[ ! -f "$rc" ]]; then
@@ -137,30 +198,106 @@ find_codex_repo() {
   return 1
 }
 
+clone_codex_repo() {
+  local target="$1"
+  print_step "openai/codex source not found. Cloning to $target" >&2
+  mkdir -p "$(dirname "$target")"
+  git clone --depth 1 https://github.com/openai/codex "$target" >&2
+  echo "$target"
+}
+
+default_vendor_codex_repo() {
+  echo "$HOME/.codex-hud/vendor/openai-codex"
+}
+
+is_managed_vendor_repo() {
+  local path="$1"
+  [[ "$path" == "$(default_vendor_codex_repo)" ]]
+}
+
+refresh_managed_vendor_repo() {
+  local target="$1"
+
+  print_step "Managed Codex checkout is stale. Resetting and pulling latest" >&2
+  git -C "$target" checkout -- . >/dev/null 2>&1 || true
+  git -C "$target" clean -fd >/dev/null 2>&1 || true
+  if git -C "$target" pull --ff-only >&2; then
+    echo "$target"
+    return 0
+  fi
+
+  # Pull failed (e.g. shallow clone conflict) — fall back to re-clone
+  local backup="${target}.backup.$(date +%Y%m%d%H%M%S)"
+  print_step "Pull failed. Backing up to $backup and re-cloning" >&2
+  mv "$target" "$backup"
+  clone_codex_repo "$target" >/dev/null 2>&1
+  echo "$target"
+}
+
 ensure_codex_repo() {
+  local preferred="${1:-}"
+
+  if [[ -n "$preferred" ]]; then
+    if is_codex_repo "$preferred"; then
+      echo "$preferred"
+      return 0
+    fi
+    clone_codex_repo "$preferred"
+    return 0
+  fi
+
   if find_codex_repo >/dev/null 2>&1; then
     find_codex_repo
     return 0
   fi
 
-  local target="$HOME/.codex-hud/vendor/openai-codex"
-  print_step "openai/codex source not found. Cloning to $target"
-  mkdir -p "$(dirname "$target")"
-  git clone --depth 1 https://github.com/openai/codex "$target"
-  echo "$target"
+  clone_codex_repo "$(default_vendor_codex_repo)"
 }
 
 apply_patch_if_needed() {
   local codex_repo="$1"
+  local state_dir="$codex_repo/$PATCH_STATE_DIR_NAME"
+  local applied_patch_file="$state_dir/$PATCH_STATE_FILE_NAME"
+
+  mkdir -p "$state_dir"
+
+  if [[ -f "$applied_patch_file" ]]; then
+    if cmp -s "$PATCH_FILE" "$applied_patch_file"; then
+      if git -C "$codex_repo" apply --reverse --check "$PATCH_FILE" >/dev/null 2>&1; then
+        print_step "Patch already applied at $codex_repo"
+        return 0
+      fi
+      fatal "Patch state says current patch is applied, but Codex source does not match. Use a clean Codex checkout."
+    fi
+
+    print_step "Updating previously applied Codex patch"
+    if ! git -C "$codex_repo" apply --reverse --check "$applied_patch_file" >/dev/null 2>&1; then
+      fatal "Cannot reverse previously applied Codex patch cleanly. Use a clean Codex checkout or revert local Codex changes first."
+    fi
+    git -C "$codex_repo" apply --reverse "$applied_patch_file"
+    rm -f "$applied_patch_file"
+  fi
 
   if git -C "$codex_repo" apply --reverse --check "$PATCH_FILE" >/dev/null 2>&1; then
     print_step "Patch already applied at $codex_repo"
+    cp "$PATCH_FILE" "$applied_patch_file"
     return 0
   fi
 
+  if ! git -C "$codex_repo" apply --check "$PATCH_FILE" >/dev/null 2>&1; then
+    if is_managed_vendor_repo "$codex_repo"; then
+      codex_repo="$(refresh_managed_vendor_repo "$codex_repo")"
+      state_dir="$codex_repo/$PATCH_STATE_DIR_NAME"
+      applied_patch_file="$state_dir/$PATCH_STATE_FILE_NAME"
+      mkdir -p "$state_dir"
+    else
+      fatal "Codex patch does not apply cleanly. Use a clean Codex checkout or rerun with the managed vendor repo."
+    fi
+  fi
+
   print_step "Applying Codex status-line command patch"
-  git -C "$codex_repo" apply --check "$PATCH_FILE"
   git -C "$codex_repo" apply "$PATCH_FILE"
+  cp "$PATCH_FILE" "$applied_patch_file"
 }
 
 build_hud() {
@@ -182,49 +319,419 @@ build_patched_codex_binary() {
   ensure_rust_toolchain
   ensure_linux_build_deps
 
-  print_step "Building patched Codex binary"
+  local cargo_profile="release"
+  local cargo_flags=("--release")
+  local profile_dir="release"
+
+  if [[ "$FAST_BUILD" -eq 1 ]]; then
+    print_step "Building patched Codex binary (fast mode: thin LTO, parallel codegen)"
+    export CARGO_PROFILE_RELEASE_LTO="thin"
+    export CARGO_PROFILE_RELEASE_CODEGEN_UNITS="16"
+  else
+    print_step "Building patched Codex binary (this may take 10-20 min on first run)"
+  fi
+
   cd "$codex_repo/codex-rs"
   local build_log
   build_log="$(mktemp)"
 
-  if ! cargo build --release -p codex-cli >"$build_log" 2>&1; then
+  if ! cargo build "${cargo_flags[@]}" -p codex-cli 2>&1 | tee "$build_log"; then
     if grep -q "COMPILER BUG DETECTED" "$build_log"; then
       print_step "Detected gcc compiler bug from aws-lc-sys. Retrying with clang"
       ensure_linux_build_deps
-      CC=clang CXX=clang++ cargo build --release -p codex-cli
+      CC=clang CXX=clang++ cargo build "${cargo_flags[@]}" -p codex-cli
     else
-      cat "$build_log"
       rm -f "$build_log"
       fatal "Failed to build patched Codex binary"
     fi
   fi
   rm -f "$build_log"
 
-  local built="$codex_repo/codex-rs/target/release/codex"
+  local built="$codex_repo/codex-rs/target/$profile_dir/codex"
   if [[ ! -x "$built" ]]; then
     echo "Patched codex binary not found at $built"
     return 1
   fi
 
   local target="$INSTALL_BIN_DIR/codex"
-  mkdir -p "$INSTALL_BIN_DIR"
+  local use_sudo=()
+  if [[ ! -w "$INSTALL_BIN_DIR" ]]; then
+    if command -v sudo >/dev/null 2>&1; then
+      print_step "Install directory $INSTALL_BIN_DIR requires elevated permissions"
+      use_sudo=(sudo)
+    else
+      fatal "Cannot write to $INSTALL_BIN_DIR and sudo is not available. Run as root or use a different install path."
+    fi
+  fi
+
+  "${use_sudo[@]}" mkdir -p "$INSTALL_BIN_DIR"
 
   if [[ -x "$target" && ! -L "$target" ]]; then
     local backup="$INSTALL_BIN_DIR/codex.backup.$(date +%Y%m%d%H%M%S)"
-    cp "$target" "$backup"
+    "${use_sudo[@]}" cp "$target" "$backup"
     print_step "Backed up existing codex binary to $backup"
   fi
 
-  cp "$built" "$target"
-  chmod +x "$target"
+  "${use_sudo[@]}" cp "$built" "$target"
+  "${use_sudo[@]}" chmod +x "$target"
   print_step "Installed patched codex to $target"
 
-  ensure_local_bin_precedence
-  hash -r
+  # Ensure ~/.local/bin is on PATH when shadowing homebrew
+  if [[ "$INSTALL_BIN_DIR" == "$HOME/.local/bin" ]]; then
+    ensure_local_bin_precedence
+  fi
+  hash -r 2>/dev/null || true
+}
+
+interactive_setup() {
+  [[ -t 0 && -t 1 ]] || fatal "Interactive setup requires a terminal. Use --full or --tmux instead."
+
+  print_step "Interactive setup"
+  echo "Choose install mode:"
+  echo "  1) Full install     — patches Codex binary (requires Rust, ~10-20 min first build)"
+  echo "  2) Build HUD only"
+  echo "  3) Build HUD + update Codex config"
+  echo "  4) Patch/build patched Codex only"
+  echo "  5) tmux HUD         — lightweight, no Codex rebuild, works with stock codex"
+
+  local choice
+  choice="$(prompt_with_default "Select mode" "1")"
+  case "$choice" in
+    1) ACTION="full" ;;
+    2) ACTION="hud-only" ;;
+    3) ACTION="hud-config" ;;
+    4) ACTION="codex-only" ;;
+    5) ACTION="tmux" ;;
+    *) fatal "Unknown interactive selection: $choice" ;;
+  esac
+
+  if [[ "$ACTION" == "full" || "$ACTION" == "codex-only" ]]; then
+    local detected=""
+    if detected="$(find_codex_repo 2>/dev/null)"; then
+      echo "[install] Detected Codex source: $detected"
+      if confirm_prompt "Use this checkout?" "Y"; then
+        CODEX_REPO_OVERRIDE="$detected"
+      else
+        CODEX_REPO_OVERRIDE="$(prompt_with_default "Codex source path to use or clone into" "$HOME/.codex-hud/vendor/openai-codex")"
+      fi
+    else
+      echo "[install] No local Codex source checkout detected."
+      CODEX_REPO_OVERRIDE="$(prompt_with_default "Clone Codex source into" "$HOME/.codex-hud/vendor/openai-codex")"
+    fi
+  fi
+
+  print_step "Summary"
+  case "$ACTION" in
+    full)
+      echo "[install] Will build codex-hud, configure ~/.codex/config.toml, patch Codex, and install patched codex"
+      ;;
+    hud-only)
+      echo "[install] Will build codex-hud only"
+      ;;
+    hud-config)
+      echo "[install] Will build codex-hud and update ~/.codex/config.toml"
+      ;;
+    codex-only)
+      echo "[install] Will patch/build/install patched codex"
+      ;;
+    tmux)
+      echo "[install] Will build codex-hud and enable tmux status bar HUD (no Codex rebuild)"
+      ;;
+  esac
+  if [[ -n "$CODEX_REPO_OVERRIDE" ]]; then
+    echo "[install] Codex source path: $CODEX_REPO_OVERRIDE"
+  fi
+
+  if ! confirm_prompt "Proceed?" "Y"; then
+    echo "[install] Cancelled"
+    exit 0
+  fi
+}
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --full)
+        INTERACTIVE=0
+        shift
+        ;;
+      --fast)
+        FAST_BUILD=1
+        shift
+        ;;
+      --tmux)
+        ACTION="tmux"
+        INTERACTIVE=0
+        shift
+        ;;
+      --uninstall)
+        uninstall
+        exit 0
+        ;;
+      --help|-h)
+        print_usage
+        exit 0
+        ;;
+      *)
+        fatal "Unknown argument: $1"
+        ;;
+    esac
+  done
+}
+
+install_tmux_hud() {
+  ensure_command tmux "tmux is required for this mode (install tmux first)"
+  build_hud
+
+  local cmd="cd '$REPO_DIR' && node dist/index.js --tmux-line --once 2>/dev/null"
+
+  print_step "Configuring tmux status bar"
+  tmux set-option -g status on 2>/dev/null || true
+  tmux set-option -g status-interval 2 2>/dev/null || true
+  tmux set-option -g status-right-length 200 2>/dev/null || true
+  tmux set-option -g status-right "#($cmd)" 2>/dev/null || true
+
+  # Persist in tmux.conf so it survives restarts
+  local tmux_conf="$HOME/.tmux.conf"
+  local marker_start="# >>> codex-hud tmux >>>"
+  local marker_end="# <<< codex-hud tmux <<<"
+
+  if [[ -f "$tmux_conf" ]] && grep -Fq "$marker_start" "$tmux_conf"; then
+    # Replace existing block
+    local tmp
+    tmp="$(mktemp)"
+    awk -v ms="$marker_start" -v me="$marker_end" '
+      $0 == ms { skip=1; next }
+      $0 == me { skip=0; next }
+      !skip { print }
+    ' "$tmux_conf" > "$tmp"
+    mv "$tmp" "$tmux_conf"
+  fi
+
+  {
+    echo ""
+    echo "$marker_start"
+    echo "set-option -g status on"
+    echo "set-option -g status-interval 2"
+    echo "set-option -g status-right-length 200"
+    echo "set-option -g status-right \"#($cmd)\""
+    echo "$marker_end"
+  } >> "$tmux_conf"
+
+  print_step "Done"
+  echo "tmux HUD enabled in status bar and persisted in $tmux_conf"
+  echo "Works with stock codex — no patched binary needed."
+  echo "To disable: $REPO_DIR/scripts/tmux-disable.sh"
+}
+
+detect_existing_codex() {
+  local existing
+  existing="$(command -v codex 2>/dev/null || true)"
+  if [[ -z "$existing" ]]; then
+    INSTALL_BIN_DIR="$HOME/.local/bin"
+    return 0
+  fi
+
+  local existing_dir
+  existing_dir="$(dirname "$existing")"
+  local install_method="unknown"
+
+  # Resolve symlinks so we can detect homebrew Caskroom targets
+  local resolved
+  resolved="$(readlink -f "$existing" 2>/dev/null || realpath "$existing" 2>/dev/null || echo "$existing")"
+
+  if [[ "$existing" == *"homebrew"* || "$existing" == *"linuxbrew"* || "$resolved" == *"Cellar"* || "$resolved" == *"Caskroom"* ]]; then
+    install_method="homebrew"
+  elif [[ "$existing" == *".npm"* || "$existing" == *"node_modules"* || "$existing" == *"nvm"* ]]; then
+    install_method="npm"
+  elif [[ "$existing" == "/usr/local/bin/codex" || "$existing" == "/usr/bin/codex" ]]; then
+    # Could be npm global or manual install — check if npm knows about it
+    if npm list -g @openai/codex >/dev/null 2>&1; then
+      install_method="npm"
+    fi
+  elif [[ "$existing" == *".cargo"* ]]; then
+    install_method="cargo"
+  fi
+
+  # Already our patched binary in ~/.local/bin
+  if [[ "$existing_dir" == "$INSTALL_BIN_DIR" ]]; then
+    print_step "Detected existing Codex-HUD patched binary at $existing (will be replaced)"
+    return 0
+  fi
+
+  print_step "Detected existing Codex installation"
+  echo "  Location: $existing"
+  echo "  Installed via: $install_method"
+
+  if [[ "$install_method" == "homebrew" ]]; then
+    # Shadow homebrew installs — overwriting would break on brew upgrade
+    INSTALL_BIN_DIR="$HOME/.local/bin"
+    echo ""
+    echo "  Homebrew-managed binary detected."
+    echo "  Codex-HUD will install a patched binary to $INSTALL_BIN_DIR/codex"
+    echo "  which takes precedence via PATH ordering (original stays untouched)."
+  else
+    # Overwrite npm/cargo/unknown installs in place
+    INSTALL_BIN_DIR="$existing_dir"
+    echo ""
+    echo "  Codex-HUD will replace this binary with a patched version."
+    echo "  A backup will be saved as codex.backup.<timestamp> in the same directory."
+  fi
+
+  echo "  To restore later, run: ./install.sh --uninstall"
+  echo ""
+
+  if [[ -t 0 && -t 1 ]]; then
+    if ! confirm_prompt "Continue with install?" "Y"; then
+      echo "[install] Cancelled"
+      exit 0
+    fi
+  fi
+}
+
+uninstall() {
+  print_step "Uninstalling Codex-HUD"
+
+  # 1. Find where the current codex binary lives
+  local current
+  current="$(command -v codex 2>/dev/null || true)"
+  local search_dirs=("$INSTALL_BIN_DIR")
+  if [[ -n "$current" ]]; then
+    search_dirs+=("$(dirname "$current")")
+  fi
+
+  # 2. Look for backup and restore it, or just remove patched binary
+  local restored=0
+  for dir in "${search_dirs[@]}"; do
+    local dir_sudo=()
+    if [[ -d "$dir" && ! -w "$dir" ]] && command -v sudo >/dev/null 2>&1; then
+      dir_sudo=(sudo)
+    fi
+
+    local latest_backup
+    latest_backup="$(ls -t "$dir"/codex.backup.* 2>/dev/null | head -1 || true)"
+    if [[ -n "$latest_backup" && -f "$dir/codex" ]]; then
+      "${dir_sudo[@]}" mv "$latest_backup" "$dir/codex"
+      echo "  Restored original codex from backup: $dir/codex"
+      # Clean remaining backups
+      "${dir_sudo[@]}" rm -f "$dir"/codex.backup.* 2>/dev/null || true
+      restored=1
+      break
+    elif [[ -f "$dir/codex" ]]; then
+      "${dir_sudo[@]}" rm -f "$dir/codex"
+      echo "  Removed patched binary: $dir/codex"
+      break
+    fi
+  done
+
+  if [[ $restored -eq 0 ]]; then
+    # Clean up any stale backups
+    for dir in "${search_dirs[@]}"; do
+      local dir_sudo=()
+      if [[ -d "$dir" && ! -w "$dir" ]] && command -v sudo >/dev/null 2>&1; then
+        dir_sudo=(sudo)
+      fi
+      "${dir_sudo[@]}" rm -f "$dir"/codex.backup.* 2>/dev/null || true
+    done
+  fi
+
+  # 3. Clean PATH entries from shell rc files
+  local marker_start="# >>> codex-hud path >>>"
+  local marker_end="# <<< codex-hud path <<<"
+  local rc_files=("$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile" "$HOME/.bash_profile")
+  for rc in "${rc_files[@]}"; do
+    if [[ ! -f "$rc" ]]; then
+      continue
+    fi
+    if grep -Fq "$marker_start" "$rc"; then
+      sed -i.bak "/$marker_start/,/$marker_end/d" "$rc"
+      rm -f "${rc}.bak"
+      echo "  Removed PATH entry from $rc"
+    fi
+  done
+
+  # 4. Remove status_line_command from config.toml
+  local config="$HOME/.codex/config.toml"
+  if [[ -f "$config" ]] && grep -q "status_line_command" "$config"; then
+    sed -i.bak '/^status_line_command[[:space:]]*=/d' "$config"
+    rm -f "${config}.bak"
+    echo "  Removed status_line_command from $config"
+  fi
+
+  # 5. Clean tmux config
+  local tmux_conf="$HOME/.tmux.conf"
+  local tmux_marker_start="# >>> codex-hud tmux >>>"
+  local tmux_marker_end="# <<< codex-hud tmux <<<"
+  if [[ -f "$tmux_conf" ]] && grep -Fq "$tmux_marker_start" "$tmux_conf"; then
+    local tmp
+    tmp="$(mktemp)"
+    awk -v ms="$tmux_marker_start" -v me="$tmux_marker_end" '
+      $0 == ms { skip=1; next }
+      $0 == me { skip=0; next }
+      !skip { print }
+    ' "$tmux_conf" > "$tmp"
+    mv "$tmp" "$tmux_conf"
+    echo "  Removed tmux HUD config from $tmux_conf"
+  fi
+
+  # 6. Show what's active now
+  hash -r 2>/dev/null || true
+  local active
+  active="$(command -v codex 2>/dev/null || true)"
+  if [[ -n "$active" ]]; then
+    print_step "Codex is now: $active"
+  else
+    print_step "No codex binary found in PATH. Reinstall codex via npm/cargo if needed."
+  fi
+
+  # 7. Optionally clean vendor repo and build cache
+  local vendor
+  vendor="$(default_vendor_codex_repo)"
+  if [[ -d "$vendor" ]]; then
+    local vendor_size
+    vendor_size="$(du -sh "$vendor" 2>/dev/null | cut -f1)"
+    if [[ -t 0 && -t 1 ]] && confirm_prompt "  Remove vendored Codex source and build cache ($vendor_size)?" "N"; then
+      rm -rf "$vendor"
+      echo "  Removed $vendor"
+    fi
+  fi
+
+  print_step "Uninstall complete"
+}
+
+maybe_star_repo() {
+  local repo="anhannin/codex-hud"
+  if ! command -v gh >/dev/null 2>&1; then
+    return 0
+  fi
+  if ! gh auth status >/dev/null 2>&1; then
+    return 0
+  fi
+  # Skip if already starred
+  if gh api "/user/starred/$repo" --silent >/dev/null 2>&1; then
+    return 0
+  fi
+  if [[ ! -t 0 || ! -t 1 ]]; then
+    return 0
+  fi
+  echo ""
+  if confirm_prompt "Enjoying Codex-HUD? Star the repo on GitHub to support the project?" "N"; then
+    if gh api -X PUT "/user/starred/$repo" --silent >/dev/null 2>&1; then
+      echo "Thanks for the star!"
+    else
+      echo "Could not star — you can do it manually at https://github.com/$repo"
+    fi
+  fi
 }
 
 main() {
-  print_step "Starting one-shot install"
+  parse_args "$@"
+
+  if [[ "$INTERACTIVE" -eq 1 ]]; then
+    print_step "Starting interactive setup"
+  else
+    print_step "Starting full install"
+  fi
   ensure_command git "git is required (install git first)"
 
   if [[ ! -f "$PATCH_FILE" ]]; then
@@ -232,26 +739,57 @@ main() {
     exit 1
   fi
 
+  if [[ "$INTERACTIVE" -eq 1 ]]; then
+    interactive_setup
+  fi
+
+  if [[ "$ACTION" != "tmux" && "$ACTION" != "hud-only" ]]; then
+    detect_existing_codex
+  fi
+
+  if [[ "$ACTION" == "hud-only" ]]; then
+    build_hud
+    print_step "Done"
+    echo "HUD rebuilt at: $REPO_DIR/dist/index.js"
+    return 0
+  fi
+
+  if [[ "$ACTION" == "hud-config" ]]; then
+    build_hud
+    configure_codex
+    print_step "Done"
+    echo "HUD rebuilt at: $REPO_DIR/dist/index.js"
+    echo "HUD command wired in ~/.codex/config.toml via [tui].status_line_command"
+    return 0
+  fi
+
+  if [[ "$ACTION" == "tmux" ]]; then
+    install_tmux_hud
+    maybe_star_repo
+    return 0
+  fi
+
   local codex_repo
-  codex_repo="$(ensure_codex_repo)"
+  codex_repo="$(ensure_codex_repo "$CODEX_REPO_OVERRIDE")"
   print_step "Using Codex source: $codex_repo"
 
   apply_patch_if_needed "$codex_repo"
-  build_hud
-  configure_codex
-  build_patched_codex_binary "$codex_repo"
-
-  local resolved
-  resolved="$(command -v codex || true)"
-  if [[ "$resolved" != "$INSTALL_BIN_DIR/codex" ]]; then
-    print_step "Notice: current shell still resolves codex to: ${resolved:-<not found>}"
-    print_step "Open a new shell or run: export PATH=\"$INSTALL_BIN_DIR:\$PATH\" && hash -r"
+  if [[ "$ACTION" == "full" ]]; then
+    build_hud
+    configure_codex
   fi
+  build_patched_codex_binary "$codex_repo"
 
   print_step "Done"
   echo "Patched codex installed at: $INSTALL_BIN_DIR/codex"
-  echo "Run Codex normally: codex"
-  echo "HUD command wired in ~/.codex/config.toml via [tui].status_line_command"
+  if [[ "$ACTION" == "full" ]]; then
+    echo "Run Codex normally: codex"
+    echo "HUD command wired in ~/.codex/config.toml via [tui].status_line_command"
+  else
+    echo "Re-run ./install.sh or ./install.sh --interactive to build/configure the HUD if needed"
+  fi
+
+  maybe_star_repo
 }
 
 main "$@"

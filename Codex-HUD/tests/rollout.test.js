@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildSnapshot } from '../dist/rollout.js';
+import { buildSnapshot, findRolloutForSession } from '../dist/rollout.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -12,6 +12,8 @@ test('buildSnapshot parses context, rates, tools, and plan', async () => {
   const fixture = path.join(__dirname, 'fixtures', 'rollout-sample.jsonl');
   const snapshot = await buildSnapshot(fixture);
 
+  assert.equal(snapshot.sessionId, 'thread-1');
+  assert.equal(snapshot.cliVersion, '0.1.0');
   assert.equal(snapshot.model, 'gpt-5-codex');
   assert.equal(snapshot.turnState, 'running');
   assert.equal(snapshot.contextTokens, 64500);
@@ -22,9 +24,11 @@ test('buildSnapshot parses context, rates, tools, and plan', async () => {
 
   assert.equal(snapshot.activeTools.length, 1);
   assert.equal(snapshot.activeTools[0].label, 'filesystem/read_file');
+  assert.equal(snapshot.activeTools[0].source, 'mcp');
 
   assert.equal(snapshot.recentTools.length, 1);
   assert.equal(snapshot.recentTools[0].status, 'completed');
+  assert.equal(snapshot.recentTools[0].source, 'exec');
 
   assert.equal(snapshot.plan.length, 3);
   assert.equal(snapshot.plan[1].step, 'Implement parser');
@@ -94,4 +98,35 @@ test('buildSnapshot prefers spark limits for spark models and default for non-sp
   const defaultSnapshot = await buildSnapshot(nonSparkFixture);
   assert.equal(Math.round(defaultSnapshot.ratePrimary?.usedPercent ?? -1), 11);
   assert.equal(Math.round(defaultSnapshot.rateSecondary?.usedPercent ?? -1), 22);
+});
+
+test('findRolloutForSession resolves explicit session ids and prefers cwd matches', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-hud-session-'));
+  const sessionsDir = path.join(tmpDir, 'sessions', '2026', '03', '27');
+  fs.mkdirSync(sessionsDir, { recursive: true });
+
+  const first = path.join(sessionsDir, 'rollout-a.jsonl');
+  const second = path.join(sessionsDir, 'rollout-b.jsonl');
+
+  fs.writeFileSync(
+    first,
+    `${JSON.stringify({
+      timestamp: '2026-03-27T10:00:00Z',
+      type: 'session_meta',
+      payload: { id: 'thread-42', cwd: '/tmp/alpha' },
+    })}\n`,
+    'utf8',
+  );
+  fs.writeFileSync(
+    second,
+    `${JSON.stringify({
+      timestamp: '2026-03-27T10:05:00Z',
+      type: 'session_meta',
+      payload: { id: 'thread-42', cwd: '/tmp/beta' },
+    })}\n`,
+    'utf8',
+  );
+
+  const resolved = await findRolloutForSession('thread-42', tmpDir, '/tmp/beta');
+  assert.equal(resolved, second);
 });

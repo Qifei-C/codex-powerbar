@@ -25,6 +25,12 @@ cd codex-hud/Codex-HUD
 ./install.sh
 ```
 
+Guided install:
+```bash
+cd codex-hud/Codex-HUD
+./install.sh --interactive
+```
+
 `install.sh` automatically:
 - Builds the HUD (`npm ci`, `npm run build`)
 - Builds patched Codex and installs it to `~/.local/bin/codex`
@@ -39,7 +45,7 @@ cd codex-hud/Codex-HUD
 ```bash
 codex --version
 grep -n "status_line_command" ~/.codex/config.toml
-cd codex-hud/Codex-HUD && node dist/index.js --status-line --once --no-clear
+node ~/codex-hud/Codex-HUD/dist/index.js --status-line --once --no-clear --cwd "$PWD"
 ```
 
 ## Support

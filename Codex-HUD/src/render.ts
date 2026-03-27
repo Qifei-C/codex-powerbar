@@ -1,5 +1,8 @@
-import { RESET, bar, blue, bold, cyan, dim, green, magenta, percentColor, red, yellow } from './colors.js';
+import { RESET, bar, blue, cyan, dim, green, magenta, red, yellow } from './colors.js';
 import type { HudConfig, HudSnapshot, ToolActivity } from './types.js';
+
+const ANSI_RE = /\x1b\[[0-9;]*m/g;
+const STATUS_LINE_MAX_LINES = 4;
 
 function formatTokens(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
@@ -23,15 +26,26 @@ function formatRemaining(to?: Date): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
-function formatWindow(windowMinutes?: number): string {
-  if (windowMinutes === undefined || windowMinutes <= 0) return '?';
-  if (windowMinutes % (24 * 60) === 0) {
-    return `${windowMinutes / (24 * 60)}d`;
-  }
-  if (windowMinutes % 60 === 0) {
-    return `${windowMinutes / 60}h`;
-  }
-  return `${windowMinutes}m`;
+function formatDuration(from?: Date): string | null {
+  if (!from) return null;
+  const diffMs = Math.max(0, Date.now() - from.getTime());
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  const rem = mins % 60;
+  if (hours < 24) return rem > 0 ? `${hours}h ${rem}m` : `${hours}h`;
+  const days = Math.floor(hours / 24);
+  const remHours = hours % 24;
+  return remHours > 0 ? `${days}d ${remHours}h` : `${days}d`;
+}
+
+function formatElapsed(start: Date, end?: Date): string {
+  const diffMs = Math.max(0, (end ?? new Date()).getTime() - start.getTime());
+  const secs = Math.round(diffMs / 1000);
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  const rem = secs % 60;
+  return rem > 0 ? `${mins}m ${rem}s` : `${mins}m`;
 }
 
 function detectStatusWidth(): number {
@@ -55,23 +69,11 @@ function modelTier(model: string): string {
   return 'Max';
 }
 
-function projectFromCwd(cwd?: string): string {
+function projectFromCwd(cwd: string | undefined, levels: number): string {
   if (!cwd) return 'project';
   const parts = cwd.split(/[\\/]/).filter(Boolean);
-  return parts[parts.length - 1] || 'project';
+  return parts.slice(-Math.max(1, levels)).join('/') || 'project';
 }
-
-function trimToWidth(text: string, width: number): string {
-  const visibleLen = visibleLength(text);
-  if (visibleLen <= width) return `${text}${' '.repeat(Math.max(0, width - visibleLen + 2))}`;
-  if (width < 6) return `${truncateVisible(text, width)}${RESET}`;
-
-  const visibleBudget = Math.max(1, width - 1);
-  const truncated = truncateVisible(text, visibleBudget);
-  return `${truncated}…${RESET}`;
-}
-
-const ANSI_RE = /\x1b\[[0-9;]*m/g;
 
 function visibleLength(text: string): number {
   return text.replace(ANSI_RE, '').length;
@@ -99,116 +101,201 @@ function truncateVisible(text: string, maxVisible: number): string {
     i += 1;
   }
 
-  if (out.endsWith(RESET)) {
-    return out;
-  }
+  if (out.endsWith(RESET)) return out;
   return `${out}${RESET}`;
 }
 
-function toolPrefix(tool: ToolActivity): string {
-  if (tool.status === 'running') return yellow('◐');
-  if (tool.status === 'completed') return green('✓');
-  return red('✗');
+function trimToWidth(text: string, width: number): string {
+  const visibleLen = visibleLength(text);
+  if (visibleLen <= width) return `${text}${' '.repeat(Math.max(0, width - visibleLen))}`;
+  if (width < 6) return `${truncateVisible(text, width)}${RESET}`;
+  const truncated = truncateVisible(text, Math.max(1, width - 1));
+  return `${truncated}…${RESET}`;
+}
+
+function colorPercent(percent: number, text: string): string {
+  if (percent >= 85) return red(text);
+  if (percent >= 50) return yellow(text);
+  return green(text);
+}
+
+function renderWindow(label: string, percent: number, resetsAt?: Date): string {
+  const resetText = formatRemaining(resetsAt);
+  const body = `${colorPercent(percent, bar(percent, 10))} ${colorPercent(percent, `${percent}%`)}`;
+  if (!resetText) return `${label} ${body}`;
+  return `${label} ${body} (${blue(`resets in ${resetText}`)})`;
+}
+
+function gitDetails(snapshot: HudSnapshot, config: HudConfig): string {
+  if (!snapshot.gitBranch) return '';
+
+  const parts = [`${snapshot.gitBranch}${snapshot.gitDirty ? '*' : ''}`];
+  if (config.showGitAheadBehind) {
+    if (snapshot.gitAhead && snapshot.gitAhead > 0) parts.push(`↑${snapshot.gitAhead}`);
+    if (snapshot.gitBehind && snapshot.gitBehind > 0) parts.push(`↓${snapshot.gitBehind}`);
+  }
+
+  if (config.showGitFileStats) {
+    if (snapshot.gitModified && snapshot.gitModified > 0) parts.push(`!${snapshot.gitModified}`);
+    if (snapshot.gitAdded && snapshot.gitAdded > 0) parts.push(`+${snapshot.gitAdded}`);
+    if (snapshot.gitDeleted && snapshot.gitDeleted > 0) parts.push(`✘${snapshot.gitDeleted}`);
+    if (snapshot.gitUntracked && snapshot.gitUntracked > 0) parts.push(`?${snapshot.gitUntracked}`);
+  }
+
+  return `git:(${parts.join(' ')})`;
+}
+
+function toolBucket(tool: ToolActivity): string {
+  if (tool.source === 'exec') return 'Bash';
+
+  const lower = tool.label.toLowerCase();
+  if (lower.includes('read')) return 'Read';
+  if (lower.includes('write') || lower.includes('edit') || lower.includes('patch')) return 'Edit';
+  if (lower.includes('search') || lower.includes('grep') || lower.includes('find') || lower.includes('query')) return 'Search';
+  if (lower.includes('list')) return 'List';
+  return 'Tool';
+}
+
+function toolPrefix(status: ToolActivity['status']): string {
+  if (status === 'running') return yellow('◐');
+  if (status === 'failed') return red('✗');
+  return green('✓');
+}
+
+function summarizeTools(snapshot: HudSnapshot): string | null {
+  const groups = new Map<string, { count: number; status: ToolActivity['status'] }>();
+  const recent = [...snapshot.recentTools.slice(-24), ...snapshot.activeTools];
+
+  for (const tool of recent) {
+    const bucket = toolBucket(tool);
+    const existing = groups.get(bucket);
+    if (existing) {
+      existing.count += 1;
+      if (tool.status === 'failed') existing.status = 'failed';
+      else if (tool.status === 'running' && existing.status !== 'failed') existing.status = 'running';
+      continue;
+    }
+    groups.set(bucket, { count: 1, status: tool.status });
+  }
+
+  if (groups.size === 0) return null;
+  return Array.from(groups.entries())
+    .sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0]))
+    .slice(0, 4)
+    .map(([bucket, info]) => `${toolPrefix(info.status)} ${bucket} ×${info.count}`)
+    .join(' | ');
 }
 
 function renderPlan(snapshot: HudSnapshot): string | null {
   if (snapshot.plan.length === 0) return null;
+
   const completed = snapshot.plan.filter((p) => p.status === 'completed').length;
   const running = snapshot.plan.find((p) => p.status === 'in_progress');
-  const title = running?.step ?? snapshot.plan[0]?.step;
-  return `${cyan('Plan')} ${completed}/${snapshot.plan.length}${title ? ` • ${title}` : ''}`;
+  const pending = snapshot.plan.find((p) => p.status === 'pending');
+  const title = running?.step ?? pending?.step ?? snapshot.plan[snapshot.plan.length - 1]?.step;
+  const state = running ? '◐' : completed === snapshot.plan.length ? '✓' : '▸';
+
+  return `${state} ${completed}/${snapshot.plan.length}${title ? ` • ${title}` : ''}`;
 }
 
-export function render(snapshot: HudSnapshot, config: HudConfig): string[] {
-  const lines: string[] = [];
+function buildHeader(snapshot: HudSnapshot, config: HudConfig, compact = false): string {
+  const modelRaw = snapshot.model ?? 'unknown-model';
+  const modelBadge = compact
+    ? cyan(`[${shortenModel(modelRaw)} | ${modelTier(modelRaw)}]`)
+    : cyan(`[${modelRaw.replace(/^gpt-/i, 'g')}${modelRaw.toLowerCase().includes('spark') ? ' | Spark' : ' | Max'}]`);
+  const project = projectFromCwd(snapshot.cwd, config.pathLevels);
+  const git = gitDetails(snapshot, config);
+  const duration = formatDuration(snapshot.sessionStart);
 
-  const model = snapshot.model ?? 'unknown-model';
-  const project = snapshot.cwd ? snapshot.cwd.split(/[\\/]/).filter(Boolean).slice(-2).join('/') : '(no-cwd)';
-  const git = snapshot.gitBranch ? ` git:(${snapshot.gitBranch}${snapshot.gitDirty ? '*' : ''})` : '';
-  const turn = snapshot.turnState === 'running' ? yellow('running') : dim('idle');
+  const parts = [modelBadge, git ? `${project} ${git}` : project];
+  if (duration) parts.push(`${yellow('⏱')} ${duration}`);
+  return parts.join(compact ? ' | ' : ' │ ');
+}
 
-  lines.push(`${cyan('[Codex HUD]')} ${model} │ ${project}${git} │ turn ${turn}`);
-
+function buildContextUsageLine(snapshot: HudSnapshot, config: HudConfig): string | null {
   const parts: string[] = [];
+
   if (snapshot.contextUsedPercent !== undefined) {
-    const c = percentColor(snapshot.contextUsedPercent);
-    const usage = `${bar(snapshot.contextUsedPercent)} ${c(`${snapshot.contextUsedPercent}%`)}`;
-    const tokens = snapshot.contextTokens !== undefined
-      ? `${formatTokens(snapshot.contextTokens)}/${formatTokens(snapshot.contextWindow ?? 0)}`
-      : '';
-    parts.push(`Context ${usage}${tokens ? ` (${tokens})` : ''}`);
+    const contextPercent = snapshot.contextUsedPercent;
+    let contextPart = renderWindow('Context', contextPercent);
+    if (config.contextDisplay === 'tokens' || config.contextDisplay === 'both') {
+      const tokenText = snapshot.contextTokens !== undefined
+        ? `${formatTokens(snapshot.contextTokens)}/${formatTokens(snapshot.contextWindow ?? 0)}`
+        : undefined;
+      if (tokenText) contextPart += ` ${dim(tokenText)}`;
+    }
+    parts.push(contextPart);
   }
 
   if (config.showRates && snapshot.ratePrimary) {
-    const p = Math.round(snapshot.ratePrimary.usedPercent);
-    const primary = `${percentColor(p)(`${p}%`)}${formatRemaining(snapshot.ratePrimary.resetsAt) ? `/${formatRemaining(snapshot.ratePrimary.resetsAt)}` : ''}`;
-    const secondary = snapshot.rateSecondary
-      ? `${percentColor(Math.round(snapshot.rateSecondary.usedPercent))(`${Math.round(snapshot.rateSecondary.usedPercent)}%`)}`
-      : '';
-    parts.push(`Usage ${primary}${secondary ? ` | ${secondary}` : ''}`);
+    const primaryPercent = Math.round(snapshot.ratePrimary.usedPercent);
+    let usagePart = renderWindow('Usage', primaryPercent, snapshot.ratePrimary.resetsAt);
+
+    if (snapshot.rateSecondary && Math.round(snapshot.rateSecondary.usedPercent) >= config.sevenDayThreshold) {
+      const secondaryPercent = Math.round(snapshot.rateSecondary.usedPercent);
+      usagePart += ` | ${renderWindow('', secondaryPercent, snapshot.rateSecondary.resetsAt).trim()}`;
+    }
+
+    parts.push(usagePart);
   }
 
-  if (parts.length > 0) {
-    lines.push(parts.join(' │ '));
-  }
+  if (parts.length === 0) return null;
+  return parts.join(' │ ');
+}
 
-  const toolLines = [...snapshot.activeTools, ...snapshot.recentTools]
-    .slice(-(config.maxTools))
-    .map((tool) => `${toolPrefix(tool)} ${tool.label}`);
-
-  if (toolLines.length > 0) {
-    lines.push(`Tools ${toolLines.join(' | ')}`);
-  }
+function buildExpandedLines(snapshot: HudSnapshot, config: HudConfig): string[] {
+  const lines = [buildHeader(snapshot, config, false)];
+  const contextUsage = buildContextUsageLine(snapshot, config);
+  if (contextUsage) lines.push(contextUsage);
 
   if (config.showPlan) {
     const plan = renderPlan(snapshot);
     if (plan) lines.push(plan);
   }
 
-  lines.push(dim(snapshot.sessionPath));
+  if (config.showTools && config.maxTools > 0) {
+    const tools = summarizeTools(snapshot);
+    if (tools) lines.push(tools);
+  }
 
+  if (config.showSessionPath) lines.push(dim(snapshot.sessionPath));
   return lines;
 }
 
-export function renderTmuxLine(snapshot: HudSnapshot): string {
-  const modelRaw = snapshot.model ?? 'unknown-model';
-  const modelShort = shortenModel(modelRaw);
-  const badge = cyan(`[${modelShort} | ${modelTier(modelRaw)}]`);
+function buildCompactLine(snapshot: HudSnapshot, config: HudConfig): string {
+  const parts = [buildHeader(snapshot, config, true)];
+  if (snapshot.contextUsedPercent !== undefined) {
+    parts.push(`Ctx ${colorPercent(snapshot.contextUsedPercent, `${snapshot.contextUsedPercent}%`)}`);
+  }
+  if (config.showRates && snapshot.ratePrimary) {
+    const primaryPercent = Math.round(snapshot.ratePrimary.usedPercent);
+    const primaryRemain = formatRemaining(snapshot.ratePrimary.resetsAt);
+    parts.push(`U5 ${colorPercent(primaryPercent, `${primaryPercent}%`)}${primaryRemain ? ` ${blue(primaryRemain)}` : ''}`);
+  }
+  if (snapshot.rateSecondary && Math.round(snapshot.rateSecondary.usedPercent) >= config.sevenDayThreshold) {
+    const secondaryPercent = Math.round(snapshot.rateSecondary.usedPercent);
+    const secondaryRemain = formatRemaining(snapshot.rateSecondary.resetsAt);
+    parts.push(`U7 ${colorPercent(secondaryPercent, `${secondaryPercent}%`)}${secondaryRemain ? ` ${blue(secondaryRemain)}` : ''}`);
+  }
+  return parts.join(' | ');
+}
+
+export function render(snapshot: HudSnapshot, config: HudConfig): string[] {
+  return buildExpandedLines(snapshot, config);
+}
+
+export function renderStatusLine(snapshot: HudSnapshot, config: HudConfig): string {
   const width = detectStatusWidth();
-  const project = projectFromCwd(snapshot.cwd);
-  const git = snapshot.gitBranch ? `git:(${snapshot.gitBranch}${snapshot.gitDirty ? '*' : ''})` : '';
-  const repoPart = git ? `${project} ${git}` : project;
-
-  const p = snapshot.ratePrimary ? Math.round(snapshot.ratePrimary.usedPercent) : undefined;
-  const pRemain = snapshot.ratePrimary ? (formatRemaining(snapshot.ratePrimary.resetsAt) || '--') : '--';
-  const pWin = snapshot.ratePrimary ? formatWindow(snapshot.ratePrimary.windowMinutes) : '?';
-  const s = snapshot.rateSecondary ? Math.round(snapshot.rateSecondary.usedPercent) : undefined;
-  const sRemain = snapshot.rateSecondary ? (formatRemaining(snapshot.rateSecondary.resetsAt) || '--') : '--';
-  const sWin = snapshot.rateSecondary ? formatWindow(snapshot.rateSecondary.windowMinutes) : '?';
-
-  let line: string;
-  if (width >= 135) {
-    const usageLabel = blue('Usage');
-    const u5 = p !== undefined
-      ? `${usageLabel} ${percentColor(p)(bar(p, 8))} ${percentColor(p)(`${p}%`)} (${blue(pRemain)} / ${magenta(pWin)})`
-      : 'Usage --';
-    const u7 = s !== undefined
-      ? `${percentColor(s)(bar(s, 6))} ${percentColor(s)(`${s}%`)} (${blue(sRemain)} / ${magenta(sWin)})`
-      : '';
-    line = [badge, blue(repoPart), u5, u7].filter(Boolean).join(' | ');
-  } else if (width >= 105) {
-    const u5 = p !== undefined
-      ? `U5 ${percentColor(p)(bar(p, 6))} ${percentColor(p)(`${p}%`)} (${blue(pRemain)})`
-      : 'U5 --';
-    const u7 = s !== undefined
-      ? `U7 ${percentColor(s)(bar(s, 5))} ${percentColor(s)(`${s}%`)} (${blue(sRemain)})`
-      : '';
-    line = [badge, magenta(repoPart), u5, u7].filter(Boolean).join(' | ');
-  } else {
-    const u5 = p !== undefined ? `U5 ${percentColor(p)(`${p}%`)}` : 'U5 --';
-    const u7 = s !== undefined ? `U7 ${percentColor(s)(`${s}%`)}` : '';
-    line = [badge, blue(project), u5, u7].filter(Boolean).join(' | ');
+  if (config.lineLayout === 'compact') {
+    return trimToWidth(buildCompactLine(snapshot, config), width);
   }
 
-  return trimToWidth(line, width);
+  return buildExpandedLines(snapshot, config)
+    .slice(0, STATUS_LINE_MAX_LINES)
+    .map((line) => trimToWidth(line, width))
+    .join('\n');
+}
+
+export function renderTmuxLine(snapshot: HudSnapshot, config: HudConfig): string {
+  return trimToWidth(buildCompactLine(snapshot, config), detectStatusWidth());
 }
