@@ -111,11 +111,48 @@ index 05fbaaa..887184d 100644
      /// Ordered list of terminal title item identifiers.
      ///
      /// When set, the TUI renders the selected items into the terminal window/tab title.
-diff --git a/codex-rs/tui_app_server/src/app.rs b/codex-rs/tui_app_server/src/app.rs
-index 945bf0f..8e3f6aa 100644
---- a/codex-rs/tui_app_server/src/app.rs
-+++ b/codex-rs/tui_app_server/src/app.rs
-@@ -5074,6 +5074,10 @@ impl App {
+diff --git a/codex-rs/tui/src/app.rs b/codex-rs/tui/src/app.rs
+index 945bf0f..9e41463 100644
+--- a/codex-rs/tui/src/app.rs
++++ b/codex-rs/tui/src/app.rs
+@@ -746,6 +746,36 @@ fn migration_prompt_hidden(config: &Config, migration_config_key: &str) -> bool
+     }
+ }
+ 
++fn persist_codex_hud_show_details(show_details: bool) -> std::result::Result<(), String> {
++    let home = dirs::home_dir().ok_or_else(|| "home directory is not available".to_string())?;
++    let config_dir = home.join(".codex-hud");
++    let config_path = config_dir.join("config.json");
++
++    std::fs::create_dir_all(&config_dir)
++        .map_err(|err| format!("failed to create {}: {err}", config_dir.display()))?;
++
++    let mut value = if config_path.exists() {
++        let raw = std::fs::read_to_string(&config_path)
++            .map_err(|err| format!("failed to read {}: {err}", config_path.display()))?;
++        serde_json::from_str::<serde_json::Value>(&raw)
++            .map_err(|err| format!("failed to parse {}: {err}", config_path.display()))?
++    } else {
++        serde_json::json!({})
++    };
++
++    let object = value
++        .as_object_mut()
++        .ok_or_else(|| format!("{} does not contain a JSON object", config_path.display()))?;
++    object.insert("showDetails".to_string(), serde_json::Value::Bool(show_details));
++
++    let encoded = serde_json::to_string_pretty(&value)
++        .map_err(|err| format!("failed to encode {}: {err}", config_path.display()))?;
++    std::fs::write(&config_path, format!("{encoded}\n"))
++        .map_err(|err| format!("failed to write {}: {err}", config_path.display()))?;
++
++    Ok(())
++}
++
+ fn target_preset_for_upgrade<'a>(
+     available_models: &'a [ModelPreset],
+     target_model: &str,
+@@ -5074,9 +5104,28 @@ impl App {
                  self.chat_widget.set_status_line_branch(cwd, branch);
                  self.refresh_status_line();
              }
@@ -126,10 +163,28 @@ index 945bf0f..8e3f6aa 100644
              AppEvent::StatusLineSetupCancelled => {
                  self.chat_widget.cancel_status_line_setup();
              }
-diff --git a/codex-rs/tui_app_server/src/app_event.rs b/codex-rs/tui_app_server/src/app_event.rs
-index e652cb2..c28c09c 100644
---- a/codex-rs/tui_app_server/src/app_event.rs
-+++ b/codex-rs/tui_app_server/src/app_event.rs
++            AppEvent::CodexHudSetup { show_details } => {
++                match persist_codex_hud_show_details(show_details) {
++                    Ok(()) => {
++                        self.chat_widget.refresh_status_line();
++                    }
++                    Err(err) => {
++                        tracing::error!(error = %err, "failed to persist Codex HUD settings");
++                        self.chat_widget
++                            .add_error_message(format!("Failed to save Codex HUD settings: {err}"));
++                    }
++                }
++            }
++            AppEvent::CodexHudSetupCancelled => {
++                self.chat_widget.cancel_codex_hud_setup();
++            }
+             AppEvent::TerminalTitleSetup { items } => {
+                 let ids = items.iter().map(ToString::to_string).collect::<Vec<_>>();
+                 let edit = codex_core::config::edit::terminal_title_items_edit(&ids);
+diff --git a/codex-rs/tui/src/app_event.rs b/codex-rs/tui/src/app_event.rs
+index e652cb2..472c0f1 100644
+--- a/codex-rs/tui/src/app_event.rs
++++ b/codex-rs/tui/src/app_event.rs
 @@ -542,6 +542,11 @@ pub(crate) enum AppEvent {
          cwd: PathBuf,
          branch: Option<String>,
@@ -142,10 +197,24 @@ index e652cb2..c28c09c 100644
      /// Apply a user-confirmed status-line item ordering/selection.
      StatusLineSetup {
          items: Vec<StatusLineItem>,
-diff --git a/codex-rs/tui_app_server/src/bottom_pane/chat_composer.rs b/codex-rs/tui_app_server/src/bottom_pane/chat_composer.rs
-index 7a8fa25..745e863 100644
---- a/codex-rs/tui_app_server/src/bottom_pane/chat_composer.rs
-+++ b/codex-rs/tui_app_server/src/bottom_pane/chat_composer.rs
+@@ -549,6 +554,13 @@ pub(crate) enum AppEvent {
+     /// Dismiss the status-line setup UI without changing config.
+     StatusLineSetupCancelled,
+ 
++    /// Apply a user-confirmed Codex HUD configuration update.
++    CodexHudSetup {
++        show_details: bool,
++    },
++    /// Dismiss the Codex HUD setup UI without changing config.
++    CodexHudSetupCancelled,
++
+     /// Apply a user-confirmed terminal-title item ordering/selection.
+     TerminalTitleSetup {
+         items: Vec<TerminalTitleItem>,
+diff --git a/codex-rs/tui/src/bottom_pane/chat_composer.rs b/codex-rs/tui/src/bottom_pane/chat_composer.rs
+index 7a8fa25..75d422a 100644
+--- a/codex-rs/tui/src/bottom_pane/chat_composer.rs
++++ b/codex-rs/tui/src/bottom_pane/chat_composer.rs
 @@ -125,6 +125,7 @@
  //! - If repeated space events are seen before timeout, we proceed with hold-to-talk.
  //! - While recording, repeated space events keep the recording alive; if they stop for a short
@@ -376,10 +445,107 @@ index 7a8fa25..745e863 100644
                      }
                  } else {
                      render_footer_from_props(
-diff --git a/codex-rs/tui_app_server/src/bottom_pane/footer.rs b/codex-rs/tui_app_server/src/bottom_pane/footer.rs
+diff --git a/codex-rs/tui/src/bottom_pane/codex_hud_setup.rs b/codex-rs/tui/src/bottom_pane/codex_hud_setup.rs
+new file mode 100644
+index 0000000..3ba5817
+--- /dev/null
++++ b/codex-rs/tui/src/bottom_pane/codex_hud_setup.rs
+@@ -0,0 +1,91 @@
++//! Codex HUD configuration view for customizing HUD-specific display options.
++
++use ratatui::buffer::Buffer;
++use ratatui::layout::Rect;
++use ratatui::text::Line;
++
++use crate::app_event::AppEvent;
++use crate::app_event_sender::AppEventSender;
++use crate::bottom_pane::CancellationEvent;
++use crate::bottom_pane::bottom_pane_view::BottomPaneView;
++use crate::bottom_pane::multi_select_picker::MultiSelectItem;
++use crate::bottom_pane::multi_select_picker::MultiSelectPicker;
++use crate::render::renderable::Renderable;
++
++const SHOW_DETAILS_ID: &str = "show-details";
++
++fn preview_line(items: &[MultiSelectItem]) -> Option<Line<'static>> {
++    let show_details = items
++        .iter()
++        .any(|item| item.id == SHOW_DETAILS_ID && item.enabled);
++    let preview = if show_details {
++        "HUD details enabled"
++    } else {
++        "HUD details hidden"
++    };
++    Some(Line::from(preview))
++}
++
++pub(crate) struct CodexHudSetupView {
++    picker: MultiSelectPicker,
++}
++
++impl CodexHudSetupView {
++    pub(crate) fn new(show_details: bool, app_event_tx: AppEventSender) -> Self {
++        let items = vec![MultiSelectItem {
++            id: SHOW_DETAILS_ID.to_string(),
++            name: SHOW_DETAILS_ID.to_string(),
++            description: Some(
++                "Show HUD-only details like duration, approvals, plan, tool summary, and extra badges."
++                    .to_string(),
++            ),
++            enabled: show_details,
++        }];
++
++        Self {
++            picker: MultiSelectPicker::builder(
++                "Configure Codex HUD".to_string(),
++                Some("Select which HUD-specific details to display.".to_string()),
++                app_event_tx,
++            )
++            .instructions(vec![
++                "Use ↑↓ to navigate, space to select, enter to confirm, esc to cancel.".into(),
++            ])
++            .items(items)
++            .on_preview(preview_line)
++            .on_confirm(|ids, app_event| {
++                let show_details = ids.iter().any(|id| id == SHOW_DETAILS_ID);
++                app_event.send(AppEvent::CodexHudSetup { show_details });
++            })
++            .on_cancel(|app_event| {
++                app_event.send(AppEvent::CodexHudSetupCancelled);
++            })
++            .build(),
++        }
++    }
++}
++
++impl BottomPaneView for CodexHudSetupView {
++    fn handle_key_event(&mut self, key_event: crossterm::event::KeyEvent) {
++        self.picker.handle_key_event(key_event);
++    }
++
++    fn is_complete(&self) -> bool {
++        self.picker.complete
++    }
++
++    fn on_ctrl_c(&mut self) -> CancellationEvent {
++        self.picker.close();
++        CancellationEvent::Handled
++    }
++}
++
++impl Renderable for CodexHudSetupView {
++    fn render(&self, area: Rect, buf: &mut Buffer) {
++        self.picker.render(area, buf)
++    }
++
++    fn desired_height(&self, width: u16) -> u16 {
++        self.picker.desired_height(width)
++    }
++}
+diff --git a/codex-rs/tui/src/bottom_pane/footer.rs b/codex-rs/tui/src/bottom_pane/footer.rs
 index c8148c9..2132028 100644
---- a/codex-rs/tui_app_server/src/bottom_pane/footer.rs
-+++ b/codex-rs/tui_app_server/src/bottom_pane/footer.rs
+--- a/codex-rs/tui/src/bottom_pane/footer.rs
++++ b/codex-rs/tui/src/bottom_pane/footer.rs
 @@ -77,6 +77,8 @@ pub(crate) struct FooterProps {
      pub(crate) context_window_percent: Option<i64>,
      pub(crate) context_window_used_tokens: Option<i64>,
@@ -683,11 +849,27 @@ index c8148c9..2132028 100644
              status_line_enabled: true,
              active_agent_label: None,
          };
-diff --git a/codex-rs/tui_app_server/src/bottom_pane/mod.rs b/codex-rs/tui_app_server/src/bottom_pane/mod.rs
-index d74f05b..9af296e 100644
---- a/codex-rs/tui_app_server/src/bottom_pane/mod.rs
-+++ b/codex-rs/tui_app_server/src/bottom_pane/mod.rs
-@@ -1177,12 +1177,17 @@ impl BottomPane {
+diff --git a/codex-rs/tui/src/bottom_pane/mod.rs b/codex-rs/tui/src/bottom_pane/mod.rs
+index d74f05b..ecc0ea5 100644
+--- a/codex-rs/tui/src/bottom_pane/mod.rs
++++ b/codex-rs/tui/src/bottom_pane/mod.rs
+@@ -43,6 +43,7 @@ use std::time::Duration;
+ 
+ mod app_link_view;
+ mod approval_overlay;
++mod codex_hud_setup;
+ mod mcp_server_elicitation;
+ mod multi_select_picker;
+ mod request_user_input;
+@@ -55,6 +56,7 @@ pub(crate) use app_link_view::AppLinkViewParams;
+ pub(crate) use approval_overlay::ApprovalOverlay;
+ pub(crate) use approval_overlay::ApprovalRequest;
+ pub(crate) use approval_overlay::format_requested_permissions_rule;
++pub(crate) use codex_hud_setup::CodexHudSetupView;
+ pub(crate) use mcp_server_elicitation::McpServerElicitationFormRequest;
+ pub(crate) use mcp_server_elicitation::McpServerElicitationOverlay;
+ pub(crate) use request_user_input::RequestUserInputOverlay;
+@@ -1177,12 +1179,17 @@ impl BottomPane {
          }
      }
  
@@ -706,11 +888,19 @@ index d74f05b..9af296e 100644
      pub(crate) fn set_status_line_enabled(&mut self, enabled: bool) {
          if self.composer.set_status_line_enabled(enabled) {
              self.request_redraw();
-diff --git a/codex-rs/tui_app_server/src/chatwidget.rs b/codex-rs/tui_app_server/src/chatwidget.rs
-index a343a41..3f329ab 100644
---- a/codex-rs/tui_app_server/src/chatwidget.rs
-+++ b/codex-rs/tui_app_server/src/chatwidget.rs
-@@ -125,6 +125,7 @@ use codex_protocol::items::AgentMessageItem;
+diff --git a/codex-rs/tui/src/chatwidget.rs b/codex-rs/tui/src/chatwidget.rs
+index a343a41..604af12 100644
+--- a/codex-rs/tui/src/chatwidget.rs
++++ b/codex-rs/tui/src/chatwidget.rs
+@@ -48,6 +48,7 @@ use crate::audio_device::list_realtime_audio_device_names;
+ use crate::bottom_pane::StatusLineItem;
+ use crate::bottom_pane::StatusLinePreviewData;
+ use crate::bottom_pane::StatusLineSetupView;
++use crate::bottom_pane::CodexHudSetupView;
+ use crate::bottom_pane::TerminalTitleItem;
+ use crate::bottom_pane::TerminalTitleSetupView;
+ use crate::mention_codec::LinkedMention;
+@@ -125,6 +126,7 @@ use codex_protocol::items::AgentMessageItem;
  use codex_protocol::models::MessagePhase;
  use codex_protocol::models::local_image_label_text;
  use codex_protocol::parse_command::ParsedCommand;
@@ -718,7 +908,7 @@ index a343a41..3f329ab 100644
  use codex_protocol::plan_tool::PlanItemArg as UpdatePlanItemArg;
  use codex_protocol::plan_tool::StepStatus as UpdatePlanItemStatus;
  #[cfg(test)]
-@@ -247,6 +248,68 @@ const PLAN_MODE_REASONING_SCOPE_PLAN_ONLY: &str = "Apply to Plan mode override";
+@@ -247,6 +249,68 @@ const PLAN_MODE_REASONING_SCOPE_PLAN_ONLY: &str = "Apply to Plan mode override";
  const PLAN_MODE_REASONING_SCOPE_ALL_MODES: &str = "Apply to global default and Plan mode override";
  const CONNECTORS_SELECTION_VIEW_ID: &str = "connectors-selection";
  const TUI_STUB_MESSAGE: &str = "Not available in TUI yet.";
@@ -787,7 +977,7 @@ index a343a41..3f329ab 100644
  
  /// Choose the keybinding used to edit the most-recently queued message.
  ///
-@@ -935,6 +998,12 @@ pub(crate) struct ChatWidget {
+@@ -935,6 +999,12 @@ pub(crate) struct ChatWidget {
      status_line_branch_pending: bool,
      // True once we've attempted a branch lookup for the current CWD.
      status_line_branch_lookup_complete: bool,
@@ -800,7 +990,7 @@ index a343a41..3f329ab 100644
      external_editor_state: ExternalEditorState,
      realtime_conversation: RealtimeConversationUiState,
      last_rendered_user_message_event: Option<RenderedUserMessageEvent>,
-@@ -1796,8 +1865,8 @@ impl ChatWidget {
+@@ -1796,8 +1866,8 @@ impl ChatWidget {
      }
  
      /// Sets the currently rendered footer status-line value.
@@ -811,7 +1001,18 @@ index a343a41..3f329ab 100644
      }
  
      /// Forwards the contextual active-agent label into the bottom-pane footer pipeline.
-@@ -1895,6 +1964,19 @@ impl ChatWidget {
+@@ -1830,6 +1900,10 @@ impl ChatWidget {
+         tracing::info!("Status line setup canceled by user");
+     }
+ 
++    pub(crate) fn cancel_codex_hud_setup(&self) {
++        tracing::info!("Codex HUD setup canceled by user");
++    }
++
+     /// Applies status-line item selection from the setup view to in-memory config.
+     ///
+     /// An empty selection persists as an explicit empty list.
+@@ -1895,6 +1969,19 @@ impl ChatWidget {
          self.refresh_status_surfaces();
      }
  
@@ -831,7 +1032,7 @@ index a343a41..3f329ab 100644
      fn collect_runtime_metrics_delta(&mut self) {
          if let Some(delta) = self.session_telemetry.runtime_metrics_summary() {
              self.apply_runtime_metrics_delta(delta);
-@@ -4611,6 +4693,9 @@ impl ChatWidget {
+@@ -4611,6 +4698,9 @@ impl ChatWidget {
              status_line_branch_cwd: None,
              status_line_branch_pending: false,
              status_line_branch_lookup_complete: false,
@@ -841,7 +1042,7 @@ index a343a41..3f329ab 100644
              external_editor_state: ExternalEditorState::Closed,
              realtime_conversation: RealtimeConversationUiState::default(),
              last_rendered_user_message_event: None,
-@@ -4628,7 +4713,14 @@ impl ChatWidget {
+@@ -4628,7 +4718,14 @@ impl ChatWidget {
              .set_audio_device_selection_enabled(widget.realtime_audio_device_selection_enabled());
          widget
              .bottom_pane
@@ -857,10 +1058,55 @@ index a343a41..3f329ab 100644
          widget
              .bottom_pane
              .set_collaboration_modes_enabled(/*enabled*/ true);
-diff --git a/codex-rs/tui_app_server/src/chatwidget/status_surfaces.rs b/codex-rs/tui_app_server/src/chatwidget/status_surfaces.rs
+@@ -5166,6 +5263,9 @@ impl ChatWidget {
+             SlashCommand::Statusline => {
+                 self.open_status_line_setup();
+             }
++            SlashCommand::CodexHud => {
++                self.open_codex_hud_setup();
++            }
+             SlashCommand::Theme => {
+                 self.open_theme_picker();
+             }
+@@ -7222,6 +7322,11 @@ impl ChatWidget {
+         self.bottom_pane.show_view(Box::new(view));
+     }
+ 
++    fn open_codex_hud_setup(&mut self) {
++        let view = CodexHudSetupView::new(read_codex_hud_show_details(), self.app_event_tx.clone());
++        self.bottom_pane.show_view(Box::new(view));
++    }
++
+     fn open_terminal_title_setup(&mut self) {
+         let configured_terminal_title_items = self.configured_terminal_title_items();
+         self.terminal_title_setup_original_items = Some(self.config.tui_terminal_title.clone());
+@@ -10906,5 +11011,22 @@ pub(crate) fn show_review_commit_picker_with_entries(
+     });
+ }
+ 
++fn read_codex_hud_show_details() -> bool {
++    let Some(home) = dirs::home_dir() else {
++        return true;
++    };
++    let path = home.join(".codex-hud").join("config.json");
++    let Ok(raw) = std::fs::read_to_string(path) else {
++        return true;
++    };
++    let Ok(value) = serde_json::from_str::<serde_json::Value>(&raw) else {
++        return true;
++    };
++    value
++        .get("showDetails")
++        .and_then(serde_json::Value::as_bool)
++        .unwrap_or(true)
++}
++
+ #[cfg(test)]
+ pub(crate) mod tests;
+diff --git a/codex-rs/tui/src/chatwidget/status_surfaces.rs b/codex-rs/tui/src/chatwidget/status_surfaces.rs
 index d80003c..a49bc24 100644
---- a/codex-rs/tui_app_server/src/chatwidget/status_surfaces.rs
-+++ b/codex-rs/tui_app_server/src/chatwidget/status_surfaces.rs
+--- a/codex-rs/tui/src/chatwidget/status_surfaces.rs
++++ b/codex-rs/tui/src/chatwidget/status_surfaces.rs
 @@ -135,26 +135,53 @@ impl ChatWidget {
      }
  
@@ -1079,3 +1325,31 @@ index d80003c..a49bc24 100644
      /// Resolves a display string for one configured status-line item.
      ///
      /// Returning `None` means "omit this item for now", not "configuration error". Callers rely on
+diff --git a/codex-rs/tui/src/slash_command.rs b/codex-rs/tui/src/slash_command.rs
+index ec624d3..27044d1 100644
+--- a/codex-rs/tui/src/slash_command.rs
++++ b/codex-rs/tui/src/slash_command.rs
+@@ -40,6 +40,7 @@ pub enum SlashCommand {
+     DebugConfig,
+     Title,
+     Statusline,
++    CodexHud,
+     Theme,
+     Mcp,
+     Apps,
+@@ -89,6 +90,7 @@ impl SlashCommand {
+             SlashCommand::DebugConfig => "show config layers and requirement sources for debugging",
+             SlashCommand::Title => "configure which items appear in the terminal title",
+             SlashCommand::Statusline => "configure which items appear in the status line",
++            SlashCommand::CodexHud => "configure Codex HUD settings",
+             SlashCommand::Theme => "choose a syntax highlighting theme",
+             SlashCommand::Ps => "list background terminals",
+             SlashCommand::Stop => "stop all background terminals",
+@@ -180,6 +182,7 @@ impl SlashCommand {
+             SlashCommand::Settings => true,
+             SlashCommand::Collab => true,
+             SlashCommand::Agent | SlashCommand::MultiAgents => true,
++            SlashCommand::CodexHud => false,
+             SlashCommand::Statusline => false,
+             SlashCommand::Theme => false,
+             SlashCommand::Title => false,

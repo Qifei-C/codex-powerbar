@@ -115,6 +115,7 @@ export interface HudConfig {
   preset: HudPresetName;
   refreshMs: number;
   lineLayout: HudLayout;
+  showDetails: boolean;
   pathLevels: number;
   maxTools: number;
   showTools: boolean;
@@ -133,6 +134,7 @@ export const DEFAULT_CONFIG: HudConfig = {
   preset: 'essential',
   refreshMs: 700,
   lineLayout: 'expanded',
+  showDetails: true,
   pathLevels: 2,
   maxTools: 3,
   showTools: true,

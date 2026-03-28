@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildSnapshot, findRolloutForSession } from '../dist/rollout.js';
+import { mergeSnapshotsPreferEnv } from '../dist/incremental-parser.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -132,4 +133,63 @@ test('findRolloutForSession resolves explicit session ids and prefers cwd matche
 
   const resolved = await findRolloutForSession(uniqueId, tmpDir, '/tmp/beta');
   assert.equal(resolved, second);
+});
+
+test('mergeSnapshotsPreferEnv keeps env-backed values and falls back to rollout for missing env data', () => {
+  const prevEnv = { ...process.env };
+  process.env.CODEX_MODEL = 'gpt-5.4';
+  process.env.CODEX_TURN_STATE = 'running';
+  process.env.CODEX_RUNNING_TOOLS = '2';
+  delete process.env.CODEX_PLAN_TOTAL;
+
+  try {
+    const merged = mergeSnapshotsPreferEnv(
+      {
+        sessionPath: '',
+        sessionId: 'env-thread',
+        cwd: '/env/project',
+        model: 'gpt-5.4',
+        turnState: 'running',
+        activeTools: [{
+          id: 'env-tool-1',
+          label: 'command',
+          source: 'exec',
+          status: 'running',
+          startTime: new Date('2026-01-01T00:00:00Z'),
+        }],
+        recentTools: [],
+        plan: [],
+        compactCount: 0,
+      },
+      {
+        sessionPath: '/tmp/rollout.jsonl',
+        sessionId: 'rollout-thread',
+        cwd: '/rollout/project',
+        model: 'gpt-5.3-codex',
+        turnState: 'idle',
+        activeTools: [],
+        recentTools: [{
+          id: 'recent-1',
+          label: 'filesystem/read_file',
+          source: 'mcp',
+          status: 'completed',
+          startTime: new Date('2026-01-01T00:00:00Z'),
+          endTime: new Date('2026-01-01T00:00:01Z'),
+        }],
+        plan: [{ status: 'pending', step: 'Run tests' }],
+        compactCount: 3,
+      },
+    );
+
+    assert.equal(merged.model, 'gpt-5.4');
+    assert.equal(merged.turnState, 'running');
+    assert.equal(merged.sessionPath, '/tmp/rollout.jsonl');
+    assert.equal(merged.activeTools.length, 1);
+    assert.equal(merged.recentTools.length, 1);
+    assert.equal(merged.plan.length, 1);
+    assert.equal(merged.plan[0].step, 'Run tests');
+    assert.equal(merged.compactCount, 3);
+  } finally {
+    process.env = prevEnv;
+  }
 });

@@ -16,6 +16,7 @@ interface RawConfig {
   preset?: unknown;
   refreshMs?: unknown;
   lineLayout?: unknown;
+  showDetails?: unknown;
   pathLevels?: unknown;
   maxTools?: unknown;
   showTools?: unknown;
@@ -77,6 +78,7 @@ function presetConfig(preset: HudPresetName): HudConfig {
       ...DEFAULT_CONFIG,
       preset,
       lineLayout: 'compact',
+      showDetails: false,
       pathLevels: 1,
       maxTools: 0,
       showTools: false,
@@ -93,6 +95,7 @@ function presetConfig(preset: HudPresetName): HudConfig {
       ...DEFAULT_CONFIG,
       preset,
       lineLayout: 'expanded',
+      showDetails: true,
       pathLevels: 2,
       maxTools: 5,
       showTools: true,
@@ -129,6 +132,7 @@ export function loadConfig(): HudConfig {
       preset,
       refreshMs: asPositiveInt(raw.refreshMs, base.refreshMs),
       lineLayout: asLayout(raw.lineLayout, base.lineLayout),
+      showDetails: typeof raw.showDetails === 'boolean' ? raw.showDetails : base.showDetails,
       pathLevels: asBoundedInt(raw.pathLevels, base.pathLevels, 1, 4),
       maxTools: asBoundedInt(raw.maxTools, base.maxTools, 0, 12),
       showTools: typeof raw.showTools === 'boolean' ? raw.showTools : base.showTools,

@@ -60,16 +60,12 @@ function formatElapsed(start: Date, end?: Date): string {
   return rem > 0 ? `${mins}m ${rem}s` : `${mins}m`;
 }
 
-/** Codex TUI indents status lines by 2 columns (FOOTER_INDENT_COLS). */
-const TUI_INDENT = 2;
-
 function detectStatusWidth(): number {
-  // CODEX_HUD_WIDTH is an explicit override — use as-is.
+  // CODEX_HUD_WIDTH is the TUI's actual content area width (already excludes indent).
   const hudWidth = Number.parseInt(process.env.CODEX_HUD_WIDTH ?? '', 10);
   if (!Number.isNaN(hudWidth) && hudWidth > 0) return hudWidth;
-  // COLUMNS comes from the TUI's full terminal width; subtract indent.
   const cols = Number.parseInt(process.env.COLUMNS ?? '', 10);
-  if (!Number.isNaN(cols) && cols > 0) return cols - TUI_INDENT;
+  if (!Number.isNaN(cols) && cols > 0) return cols;
   if (process.stdout.isTTY && process.stdout.columns && process.stdout.columns > 0) return process.stdout.columns;
   return 120;
 }
@@ -253,6 +249,10 @@ function buildHeaderParts(snapshot: HudSnapshot, config: HudConfig, compact = fa
     left.push(modelBadge);
   }
 
+  if (itemEnabled(snapshot, 'codex-version') && snapshot.cliVersion) {
+    left.push(dim(`v${snapshot.cliVersion}`));
+  }
+
   // Project path and git.
   if (itemEnabled(snapshot, 'current-dir', 'project-root')) {
     const project = projectFromCwd(snapshot.cwd, config.pathLevels);
@@ -263,16 +263,16 @@ function buildHeaderParts(snapshot: HudSnapshot, config: HudConfig, compact = fa
     if (git) left.push(cyan(git));
   }
 
-  // Session duration (always shown if available, it's a HUD extra).
+  // Session duration is a HUD extra and remains visible regardless of /statusline filtering.
   const duration = formatDuration(snapshot.sessionStart);
-  if (duration) left.push(dim(`⏱ ${duration}`));
+  if (config.showDetails && duration) left.push(dim(`⏱ ${duration}`));
 
   const leftStr = left.join(dim(compact ? ' | ' : ' │ '));
 
   // Feature badges: fast mode + experimental features.
   const badgeKeys: string[] = [];
-  if (snapshot.fastMode) badgeKeys.push('fast');
-  if (snapshot.experimentalFeatures) {
+  if (snapshot.fastMode && itemEnabled(snapshot, 'fast-mode')) badgeKeys.push('fast');
+  if (config.showDetails && snapshot.experimentalFeatures) {
     for (const feat of snapshot.experimentalFeatures) badgeKeys.push(feat);
   }
   const badgeStr = badgeKeys.length > 0
@@ -297,8 +297,12 @@ function assembleHeader(parts: HeaderParts, width: number): string {
   const gap = width - leftWidth - badgeWidth;
 
   if (gap >= 2) {
-    // Fits with right-alignment.
-    return `${parts.left}${' '.repeat(gap)}${parts.badges}`;
+    // Cap the gap so badges stay near content rather than at the far-right edge.
+    // The TUI footer rendering area may be slightly narrower than the reported
+    // width (due to indent, borders, or stale CODEX_HUD_WIDTH), which clips
+    // right-aligned content.  A small fixed gap avoids this fragility.
+    const MAX_BADGE_GAP = 4;
+    return `${parts.left}${' '.repeat(Math.min(gap, MAX_BADGE_GAP))}${parts.badges}`;
   }
 
   // Truncate left to make room for badges.
@@ -437,24 +441,27 @@ function renderCompactCount(count: number): string | null {
 function buildExpandedLines(snapshot: HudSnapshot, config: HudConfig): string[] {
   // Header is returned as parts so the caller can assemble with badge-aware truncation.
   const headerParts = buildHeaderParts(snapshot, config, false);
-  const lines = [assembleHeader(headerParts, detectStatusWidth())];
+  const lines: string[] = [];
+  if (headerParts.left || headerParts.badges) {
+    lines.push(assembleHeader(headerParts, detectStatusWidth()));
+  }
   const contextUsage = buildContextUsageLine(snapshot, config);
   if (contextUsage) {
-    const compactTag = renderCompactCount(snapshot.compactCount);
+    const compactTag = config.showDetails ? renderCompactCount(snapshot.compactCount) : null;
     lines.push(compactTag ? `${contextUsage} ${compactTag}` : contextUsage);
   }
 
-  if (config.showEnvironment && snapshot.environment) {
+  if (config.showDetails && config.showEnvironment && snapshot.environment) {
     const envLine = renderEnvironment(snapshot.environment);
     if (envLine) lines.push(envLine);
   }
 
-  if (config.showPlan) {
+  if (config.showDetails && config.showPlan) {
     const plan = renderPlan(snapshot);
     if (plan) lines.push(plan);
   }
 
-  if (config.showTools && config.maxTools > 0) {
+  if (config.showDetails && config.showTools && config.maxTools > 0) {
     const tools = summarizeTools(snapshot);
     if (tools) lines.push(tools);
   }
@@ -507,4 +514,3 @@ export function renderStatusLine(snapshot: HudSnapshot, config: HudConfig): stri
     })
     .join('\n');
 }
-

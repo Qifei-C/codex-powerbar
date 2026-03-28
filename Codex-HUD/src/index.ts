@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { findLatestRollout, findLatestRolloutForCwd, findRolloutForSession } from './rollout.js';
-import { buildSnapshotFromEnv } from './incremental-parser.js';
+import { buildSnapshotFromEnv, mergeSnapshotsPreferEnv } from './incremental-parser.js';
 import { createParseQueue } from './parse-queue.js';
 import { render, renderStatusLine } from './render.js';
 import { renderOverview } from './overview.js';
@@ -118,7 +118,7 @@ async function tick(args: CliArgs): Promise<number> {
     return args.intervalMs ?? config.refreshMs;
   }
 
-  const sessionId = args.sessionId ?? process.env.CODEX_HUD_SESSION_ID;
+  const sessionId = args.sessionId ?? process.env.CODEX_HUD_SESSION_ID ?? process.env.CODEX_SESSION_ID;
   const cwdHint = args.cwdHint ?? process.env.CODEX_HUD_CWD ?? process.cwd();
   const rolloutPath = args.rolloutPath
     ?? process.env.CODEX_HUD_ROLLOUT_PATH
@@ -126,9 +126,10 @@ async function tick(args: CliArgs): Promise<number> {
     ?? (cwdHint ? await findLatestRolloutForCwd(cwdHint, args.codexHome) : null)
     ?? await findLatestRollout(args.codexHome);
 
+  const envSnapshot = await buildSnapshotFromEnv();
   const snapshot = rolloutPath
-    ? await queue.request(rolloutPath)
-    : await buildSnapshotFromEnv();
+    ? mergeSnapshotsPreferEnv(envSnapshot, await queue.request(rolloutPath))
+    : envSnapshot;
 
   if (!rolloutPath && !snapshot.model && snapshot.contextUsedPercent === undefined) {
     const waiting = args.statusLine
