@@ -2,8 +2,11 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {
+  DEFAULT_BADGES,
   DEFAULT_CONFIG,
   type ContextDisplay,
+  type FeatureBadge,
+  type FeatureBadgeTheme,
   type HudConfig,
   type HudLayout,
   type HudPresetName,
@@ -21,8 +24,10 @@ interface RawConfig {
   showSessionPath?: unknown;
   showGitAheadBehind?: unknown;
   showGitFileStats?: unknown;
+  showEnvironment?: unknown;
   sevenDayThreshold?: unknown;
   contextDisplay?: unknown;
+  badges?: unknown;
 }
 
 function asPositiveInt(value: unknown, fallback: number): number {
@@ -49,6 +54,23 @@ function asContextDisplay(value: unknown, fallback: ContextDisplay): ContextDisp
     : fallback;
 }
 
+function isFeatureBadge(value: unknown): value is FeatureBadge {
+  return typeof value === 'object' && value !== null
+    && typeof (value as FeatureBadge).icon === 'string'
+    && typeof (value as FeatureBadge).label === 'string';
+}
+
+function asBadges(value: unknown, fallback: FeatureBadgeTheme): FeatureBadgeTheme {
+  if (typeof value !== 'object' || value === null) return fallback;
+  const merged = { ...fallback };
+  for (const [key, badge] of Object.entries(value as Record<string, unknown>)) {
+    if (isFeatureBadge(badge)) {
+      merged[key] = badge;
+    }
+  }
+  return merged;
+}
+
 function presetConfig(preset: HudPresetName): HudConfig {
   if (preset === 'minimal') {
     return {
@@ -61,6 +83,7 @@ function presetConfig(preset: HudPresetName): HudConfig {
       showPlan: false,
       showGitAheadBehind: false,
       showGitFileStats: false,
+      showEnvironment: false,
       contextDisplay: 'percent',
     };
   }
@@ -77,6 +100,7 @@ function presetConfig(preset: HudPresetName): HudConfig {
       showSessionPath: true,
       showGitAheadBehind: true,
       showGitFileStats: true,
+      showEnvironment: true,
       sevenDayThreshold: 0,
       contextDisplay: 'both',
     };
@@ -117,8 +141,12 @@ export function loadConfig(): HudConfig {
       showGitFileStats: typeof raw.showGitFileStats === 'boolean'
         ? raw.showGitFileStats
         : base.showGitFileStats,
+      showEnvironment: typeof raw.showEnvironment === 'boolean'
+        ? raw.showEnvironment
+        : base.showEnvironment,
       sevenDayThreshold: asBoundedInt(raw.sevenDayThreshold, base.sevenDayThreshold, 0, 100),
       contextDisplay: asContextDisplay(raw.contextDisplay, base.contextDisplay),
+      badges: asBadges(raw.badges, base.badges),
     };
   } catch {
     return DEFAULT_CONFIG;

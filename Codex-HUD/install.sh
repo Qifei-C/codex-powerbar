@@ -11,6 +11,10 @@ INTERACTIVE=1
 ACTION="full"
 CODEX_REPO_OVERRIDE=""
 FAST_BUILD=0
+REFERENCE_CODEX_VERSION=""
+PREBUILT_RELEASE_REPO="Qifei-C/codex-HUD"
+PREBUILT_RELEASE_TAG="codex-v0.117.0"
+FORCE_SOURCE_BUILD=0
 
 print_step() {
   printf '\n[install] %s\n' "$1"
@@ -23,12 +27,13 @@ fatal() {
 
 print_usage() {
   cat <<'USAGE'
-Usage: ./install.sh [--full] [--fast] [--tmux] [--uninstall] [--help]
+Usage: ./install.sh [--full] [--fast] [--source] [--tmux] [--uninstall] [--help]
 
 Modes:
   default            Interactive guided setup (recommended)
   --full             One-shot full install without prompts
   --fast             Use faster Rust build profile (thin LTO, parallel codegen)
+  --source           Skip prebuilt binary download, always build from source
   --tmux             Lightweight install: HUD via tmux status bar (no Codex rebuild)
   --uninstall        Remove patched codex binary, restore config, clean PATH entries
 
@@ -81,6 +86,105 @@ ensure_command() {
   if ! command -v "$cmd" >/dev/null 2>&1; then
     fatal "$hint"
   fi
+}
+
+parse_codex_version() {
+  local text="$1"
+  if [[ "$text" =~ codex-cli[[:space:]]+([0-9]+(\.[0-9]+){1,2}([-.][A-Za-z0-9.-]+)?) ]]; then
+    printf '%s\n' "${BASH_REMATCH[1]}"
+  fi
+}
+
+codex_version_from_binary() {
+  local binary="$1"
+  [[ -x "$binary" ]] || return 0
+  local output
+  output="$("$binary" --version 2>/dev/null || true)"
+  parse_codex_version "$output"
+}
+
+find_reference_codex_version() {
+  local -a candidates=()
+  local line
+
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    candidates+=("$line")
+  done < <(type -a -p codex 2>/dev/null | awk '!seen[$0]++')
+
+  if [[ -d "$INSTALL_BIN_DIR" ]]; then
+    local backup
+    backup="$(ls -t "$INSTALL_BIN_DIR"/codex.backup.* 2>/dev/null | head -1 || true)"
+    if [[ -n "$backup" ]]; then
+      candidates+=("$backup")
+    fi
+  fi
+
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    [[ -x "$candidate" ]] || continue
+    if [[ "$candidate" == "$INSTALL_BIN_DIR/codex" ]]; then
+      continue
+    fi
+    local version
+    version="$(codex_version_from_binary "$candidate")"
+    if [[ -n "$version" && "$version" != "0.0.0" ]]; then
+      printf '%s\n' "$version"
+      return 0
+    fi
+  done
+
+  # Fallback: query the npm registry for the latest published version.
+  local npm_version
+  npm_version="$(curl -sf --max-time 5 "https://registry.npmjs.org/@openai/codex/latest" 2>/dev/null \
+    | python3 -c "import sys,json; print(json.load(sys.stdin).get('version',''))" 2>/dev/null || true)"
+  if [[ -n "$npm_version" && "$npm_version" != "0.0.0" ]]; then
+    printf '%s\n' "$npm_version"
+    return 0
+  fi
+
+  return 0
+}
+
+align_codex_workspace_version() {
+  local codex_repo="$1"
+  local version="$2"
+  [[ -n "$version" ]] || return 0
+
+  local cargo_toml="$codex_repo/codex-rs/Cargo.toml"
+  [[ -f "$cargo_toml" ]] || return 0
+
+  local current
+  current="$(
+    awk '
+      $0=="[workspace.package]" { in_section=1; next }
+      /^\[/ && in_section { exit }
+      in_section && $1=="version" && $2=="=" {
+        gsub(/"/, "", $3)
+        print $3
+        exit
+      }
+    ' "$cargo_toml"
+  )"
+
+  if [[ "$current" == "$version" ]]; then
+    return 0
+  fi
+
+  local tmp
+  tmp="$(mktemp)"
+  awk -v v="$version" '
+    BEGIN { in_section=0 }
+    $0=="[workspace.package]" { in_section=1; print; next }
+    /^\[/ && in_section { in_section=0 }
+    in_section && $1=="version" && $2=="=" {
+      print "version = \"" v "\""
+      next
+    }
+    { print }
+  ' "$cargo_toml" > "$tmp"
+  mv "$tmp" "$cargo_toml"
+  print_step "Aligned patched Codex version to $version"
 }
 
 ensure_rust_toolchain() {
@@ -313,11 +417,96 @@ configure_codex() {
   "$REPO_DIR/scripts/configure-codex-statusline.sh" --repo-dir "$REPO_DIR"
 }
 
+detect_platform_asset() {
+  local os arch asset
+  os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  arch="$(uname -m)"
+  case "$arch" in
+    arm64|aarch64) arch="arm64" ;;
+    x86_64|amd64)  arch="x86_64" ;;
+    *)             return 1 ;;
+  esac
+  asset="codex-${os}-${arch}.tar.gz"
+  printf '%s\n' "$asset"
+}
+
+try_download_prebuilt() {
+  if [[ "$FORCE_SOURCE_BUILD" -eq 1 ]]; then
+    return 1
+  fi
+
+  local asset
+  asset="$(detect_platform_asset 2>/dev/null)" || return 1
+  local url="https://github.com/${PREBUILT_RELEASE_REPO}/releases/download/${PREBUILT_RELEASE_TAG}/${asset}"
+
+  print_step "Trying prebuilt binary: $asset"
+  local tmp_dir
+  tmp_dir="$(mktemp -d)"
+
+  if ! curl -fSL --max-time 120 -o "$tmp_dir/$asset" "$url" 2>/dev/null; then
+    print_step "Prebuilt binary not available for this platform — falling back to source build"
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+
+  if ! tar xzf "$tmp_dir/$asset" -C "$tmp_dir" 2>/dev/null; then
+    print_step "Failed to extract prebuilt binary — falling back to source build"
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+
+  if [[ ! -x "$tmp_dir/codex" ]]; then
+    print_step "Prebuilt archive missing codex binary — falling back to source build"
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+
+  local target="$INSTALL_BIN_DIR/codex"
+  local use_sudo=()
+  if [[ ! -w "$INSTALL_BIN_DIR" ]] && command -v sudo >/dev/null 2>&1; then
+    use_sudo=(sudo)
+  fi
+
+  if (( ${#use_sudo[@]} )); then
+    "${use_sudo[@]}" mkdir -p "$INSTALL_BIN_DIR"
+  else
+    mkdir -p "$INSTALL_BIN_DIR"
+  fi
+
+  if [[ -x "$target" && ! -L "$target" ]]; then
+    local backup="$INSTALL_BIN_DIR/codex.backup.$(date +%Y%m%d%H%M%S)"
+    if (( ${#use_sudo[@]} )); then
+      "${use_sudo[@]}" cp "$target" "$backup"
+    else
+      cp "$target" "$backup"
+    fi
+    print_step "Backed up existing codex binary to $backup"
+  fi
+
+  if (( ${#use_sudo[@]} )); then
+    "${use_sudo[@]}" cp "$tmp_dir/codex" "$target"
+    "${use_sudo[@]}" chmod +x "$target"
+  else
+    cp "$tmp_dir/codex" "$target"
+    chmod +x "$target"
+  fi
+  rm -rf "$tmp_dir"
+
+  if [[ "$INSTALL_BIN_DIR" == "$HOME/.local/bin" ]]; then
+    ensure_local_bin_precedence
+  fi
+  hash -r 2>/dev/null || true
+
+  print_step "Installed prebuilt patched codex to $target"
+  return 0
+}
+
 build_patched_codex_binary() {
   local codex_repo="$1"
 
   ensure_rust_toolchain
   ensure_linux_build_deps
+  align_codex_workspace_version "$codex_repo" "$REFERENCE_CODEX_VERSION"
 
   local cargo_profile="release"
   local cargo_flags=("--release")
@@ -364,16 +553,29 @@ build_patched_codex_binary() {
     fi
   fi
 
-  "${use_sudo[@]}" mkdir -p "$INSTALL_BIN_DIR"
+  if (( ${#use_sudo[@]} )); then
+    "${use_sudo[@]}" mkdir -p "$INSTALL_BIN_DIR"
+  else
+    mkdir -p "$INSTALL_BIN_DIR"
+  fi
 
   if [[ -x "$target" && ! -L "$target" ]]; then
     local backup="$INSTALL_BIN_DIR/codex.backup.$(date +%Y%m%d%H%M%S)"
-    "${use_sudo[@]}" cp "$target" "$backup"
+    if (( ${#use_sudo[@]} )); then
+      "${use_sudo[@]}" cp "$target" "$backup"
+    else
+      cp "$target" "$backup"
+    fi
     print_step "Backed up existing codex binary to $backup"
   fi
 
-  "${use_sudo[@]}" cp "$built" "$target"
-  "${use_sudo[@]}" chmod +x "$target"
+  if (( ${#use_sudo[@]} )); then
+    "${use_sudo[@]}" cp "$built" "$target"
+    "${use_sudo[@]}" chmod +x "$target"
+  else
+    cp "$built" "$target"
+    chmod +x "$target"
+  fi
   print_step "Installed patched codex to $target"
 
   # Ensure ~/.local/bin is on PATH when shadowing homebrew
@@ -381,6 +583,25 @@ build_patched_codex_binary() {
     ensure_local_bin_precedence
   fi
   hash -r 2>/dev/null || true
+}
+
+verify_installed_codex() {
+  local expected="$INSTALL_BIN_DIR/codex"
+  local resolved
+
+  if [[ ! -x "$expected" ]]; then
+    fatal "Patched codex was built but not installed to $expected"
+  fi
+
+  resolved="$(command -v codex 2>/dev/null || true)"
+  if [[ "$resolved" == "$expected" ]]; then
+    print_step "Verified patched codex on PATH: $resolved"
+    return 0
+  fi
+
+  print_step "Notice: current shell resolves codex to: ${resolved:-<not found>}"
+  print_step "Patched codex is installed at: $expected"
+  print_step "Open a new shell or run: export PATH=\"$INSTALL_BIN_DIR:\$PATH\" && hash -r"
 }
 
 interactive_setup() {
@@ -459,6 +680,10 @@ parse_args() {
         FAST_BUILD=1
         shift
         ;;
+      --source)
+        FORCE_SOURCE_BUILD=1
+        shift
+        ;;
       --tmux)
         ACTION="tmux"
         INTERACTIVE=0
@@ -529,6 +754,7 @@ detect_existing_codex() {
   existing="$(command -v codex 2>/dev/null || true)"
   if [[ -z "$existing" ]]; then
     INSTALL_BIN_DIR="$HOME/.local/bin"
+    REFERENCE_CODEX_VERSION="$(find_reference_codex_version)"
     return 0
   fi
 
@@ -556,6 +782,7 @@ detect_existing_codex() {
   # Already our patched binary in ~/.local/bin
   if [[ "$existing_dir" == "$INSTALL_BIN_DIR" ]]; then
     print_step "Detected existing Codex-HUD patched binary at $existing (will be replaced)"
+    REFERENCE_CODEX_VERSION="$(find_reference_codex_version)"
     return 0
   fi
 
@@ -587,6 +814,8 @@ detect_existing_codex() {
       exit 0
     fi
   fi
+
+  REFERENCE_CODEX_VERSION="$(find_reference_codex_version)"
 }
 
 uninstall() {
@@ -769,19 +998,27 @@ main() {
     return 0
   fi
 
-  local codex_repo
-  codex_repo="$(ensure_codex_repo "$CODEX_REPO_OVERRIDE")"
-  print_step "Using Codex source: $codex_repo"
-
-  apply_patch_if_needed "$codex_repo"
   if [[ "$ACTION" == "full" ]]; then
     build_hud
     configure_codex
   fi
-  build_patched_codex_binary "$codex_repo"
 
-  print_step "Done"
-  echo "Patched codex installed at: $INSTALL_BIN_DIR/codex"
+  if try_download_prebuilt; then
+    verify_installed_codex
+    print_step "Done"
+    echo "Patched codex installed at: $INSTALL_BIN_DIR/codex (prebuilt)"
+  else
+    local codex_repo
+    codex_repo="$(ensure_codex_repo "$CODEX_REPO_OVERRIDE")"
+    print_step "Using Codex source: $codex_repo"
+
+    apply_patch_if_needed "$codex_repo"
+    build_patched_codex_binary "$codex_repo"
+    verify_installed_codex
+
+    print_step "Done"
+    echo "Patched codex installed at: $INSTALL_BIN_DIR/codex (built from source)"
+  fi
   if [[ "$ACTION" == "full" ]]; then
     echo "Run Codex normally: codex"
     echo "HUD command wired in ~/.codex/config.toml via [tui].status_line_command"

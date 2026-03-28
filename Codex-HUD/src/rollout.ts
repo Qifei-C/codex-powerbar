@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { getGitInfo } from './git.js';
-import type { HudSnapshot, PlanItem, ToolActivity } from './types.js';
+import type { CodexStatusLineItem, HudSnapshot, PlanItem, ToolActivity } from './types.js';
 
 interface RolloutLine {
   timestamp?: string;
@@ -282,6 +282,7 @@ export async function buildSnapshot(rolloutPath: string): Promise<HudSnapshot> {
     activeTools: [],
     recentTools: [],
     plan: [],
+    compactCount: 0,
   };
 
   if (!rolloutPath || !fs.existsSync(rolloutPath)) {
@@ -353,10 +354,11 @@ export async function buildSnapshot(rolloutPath: string): Promise<HudSnapshot> {
       const info = event.info;
       if (info && typeof info === 'object') {
         const i = info as Record<string, unknown>;
-        const total = i.total_token_usage;
-        if (total && typeof total === 'object') {
-          const t = total as Record<string, unknown>;
-          const contextTokens = toNumber(t.total_tokens);
+        // Use last_token_usage (current turn) for context, not total_token_usage (cumulative).
+        const last = i.last_token_usage;
+        if (last && typeof last === 'object') {
+          const l = last as Record<string, unknown>;
+          const contextTokens = toNumber(l.input_tokens);
           if (contextTokens !== undefined) snapshot.contextTokens = contextTokens;
         }
 
@@ -383,6 +385,11 @@ export async function buildSnapshot(rolloutPath: string): Promise<HudSnapshot> {
           }
         }
       }
+      continue;
+    }
+
+    if (eventType === 'context_compacted') {
+      snapshot.compactCount += 1;
       continue;
     }
 
@@ -481,5 +488,107 @@ export async function buildSnapshot(rolloutPath: string): Promise<HudSnapshot> {
     snapshot.rateSecondary = defaultRateSecondary ?? sparkRateSecondary;
   }
 
+  // Override with live data from codex env vars (set by patched status_line_command).
+  applyCodexEnvOverrides(snapshot);
+
   return snapshot;
+}
+
+export function buildSnapshotFromEnv(): HudSnapshot {
+  const snapshot: HudSnapshot = {
+    sessionPath: '',
+    turnState: 'idle',
+    activeTools: [],
+    recentTools: [],
+    plan: [],
+    compactCount: 0,
+    cwd: process.env.CODEX_HUD_CWD ?? process.cwd(),
+  };
+  applyCodexEnvOverrides(snapshot);
+  return snapshot;
+}
+
+function parseResetDate(raw?: string): Date | undefined {
+  if (!raw) return undefined;
+  const d = new Date(raw);
+  if (!Number.isNaN(d.getTime())) return d;
+  const match = raw.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+  if (match) {
+    let hours = Number.parseInt(match[1], 10);
+    const minutes = Number.parseInt(match[2], 10);
+    const ampm = match[3]?.toUpperCase();
+    if (ampm === 'PM' && hours < 12) hours += 12;
+    if (ampm === 'AM' && hours === 12) hours = 0;
+    const now = new Date();
+    const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes);
+    if (target.getTime() <= now.getTime()) target.setDate(target.getDate() + 1);
+    return target;
+  }
+  return undefined;
+}
+
+function applyCodexEnvOverrides(snapshot: HudSnapshot): void {
+  const usedPct = Number.parseInt(process.env.CODEX_CONTEXT_USED_PCT ?? '', 10);
+  const window = Number.parseInt(process.env.CODEX_CONTEXT_WINDOW ?? '', 10);
+  const usedTokens = Number.parseInt(process.env.CODEX_CONTEXT_USED_TOKENS ?? '', 10);
+  const model = process.env.CODEX_MODEL;
+
+  if (!Number.isNaN(usedPct)) {
+    snapshot.contextUsedPercent = Math.max(0, Math.min(100, usedPct));
+  }
+  if (!Number.isNaN(window) && window > 0) {
+    snapshot.contextWindow = window;
+  }
+  if (!Number.isNaN(usedTokens) && usedTokens > 0) {
+    snapshot.contextTokens = usedTokens;
+  }
+  if (model && model.trim()) {
+    snapshot.model = model.trim();
+  }
+  const effort = process.env.CODEX_REASONING_EFFORT;
+  if (effort && effort.trim()) {
+    snapshot.reasoningEffort = effort.trim();
+  }
+  if (process.env.CODEX_FAST === '1') {
+    snapshot.fastMode = true;
+  }
+
+  // Rate limit windows from env vars (primary = 5h, secondary = 7d).
+  const primaryPct = Number.parseFloat(process.env.CODEX_RATE_PRIMARY_PCT ?? '');
+  if (!Number.isNaN(primaryPct)) {
+    const resetsRaw = process.env.CODEX_RATE_PRIMARY_RESETS;
+    const windowMin = Number.parseInt(process.env.CODEX_RATE_PRIMARY_WINDOW_MIN ?? '', 10);
+    snapshot.ratePrimary = {
+      usedPercent: primaryPct,
+      resetsAt: parseResetDate(resetsRaw),
+      windowMinutes: !Number.isNaN(windowMin) ? windowMin : undefined,
+    };
+  }
+
+  const secondaryPct = Number.parseFloat(process.env.CODEX_RATE_SECONDARY_PCT ?? '');
+  if (!Number.isNaN(secondaryPct)) {
+    const resetsRaw = process.env.CODEX_RATE_SECONDARY_RESETS;
+    const windowMin = Number.parseInt(process.env.CODEX_RATE_SECONDARY_WINDOW_MIN ?? '', 10);
+    snapshot.rateSecondary = {
+      usedPercent: secondaryPct,
+      resetsAt: parseResetDate(resetsRaw),
+      windowMinutes: !Number.isNaN(windowMin) ? windowMin : undefined,
+    };
+  }
+
+  // Experimental features.
+  const featuresRaw = process.env.CODEX_FEATURES;
+  if (featuresRaw) {
+    snapshot.experimentalFeatures = featuresRaw.split(',').map((s) => s.trim()).filter(Boolean);
+  }
+
+  // Codex /statusline item selection.
+  const itemsRaw = process.env.CODEX_STATUS_LINE_ITEMS;
+  if (itemsRaw !== undefined) {
+    const items = itemsRaw
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean) as CodexStatusLineItem[];
+    snapshot.statusLineItems = new Set(items);
+  }
 }

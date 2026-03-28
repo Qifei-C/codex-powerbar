@@ -105,6 +105,9 @@ test('findRolloutForSession resolves explicit session ids and prefers cwd matche
   const sessionsDir = path.join(tmpDir, 'sessions', '2026', '03', '27');
   fs.mkdirSync(sessionsDir, { recursive: true });
 
+  // Use a unique session ID per run to avoid stale global session-index cache.
+  const uniqueId = `thread-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
   const first = path.join(sessionsDir, 'rollout-a.jsonl');
   const second = path.join(sessionsDir, 'rollout-b.jsonl');
 
@@ -113,7 +116,7 @@ test('findRolloutForSession resolves explicit session ids and prefers cwd matche
     `${JSON.stringify({
       timestamp: '2026-03-27T10:00:00Z',
       type: 'session_meta',
-      payload: { id: 'thread-42', cwd: '/tmp/alpha' },
+      payload: { id: uniqueId, cwd: '/tmp/alpha' },
     })}\n`,
     'utf8',
   );
@@ -122,11 +125,11 @@ test('findRolloutForSession resolves explicit session ids and prefers cwd matche
     `${JSON.stringify({
       timestamp: '2026-03-27T10:05:00Z',
       type: 'session_meta',
-      payload: { id: 'thread-42', cwd: '/tmp/beta' },
+      payload: { id: uniqueId, cwd: '/tmp/beta' },
     })}\n`,
     'utf8',
   );
 
-  const resolved = await findRolloutForSession('thread-42', tmpDir, '/tmp/beta');
+  const resolved = await findRolloutForSession(uniqueId, tmpDir, '/tmp/beta');
   assert.equal(resolved, second);
 });

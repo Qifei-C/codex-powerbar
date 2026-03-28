@@ -1,14 +1,19 @@
 #!/usr/bin/env node
 
-import { buildSnapshot, findLatestRollout, findLatestRolloutForCwd, findRolloutForSession } from './rollout.js';
-import { render, renderStatusLine, renderTmuxLine } from './render.js';
+import { findLatestRollout, findLatestRolloutForCwd, findRolloutForSession } from './rollout.js';
+import { buildSnapshotFromEnv } from './incremental-parser.js';
+import { createParseQueue } from './parse-queue.js';
+import { render, renderStatusLine } from './render.js';
+import { renderOverview } from './overview.js';
+import { runSelfCheck } from './self-check.js';
 import { loadConfig } from './config.js';
 
 interface CliArgs {
   once: boolean;
   clear: boolean;
-  tmuxLine: boolean;
   statusLine: boolean;
+  overview: boolean;
+  selfCheck: boolean;
   intervalMs?: number;
   rolloutPath?: string;
   sessionId?: string;
@@ -17,16 +22,19 @@ interface CliArgs {
 }
 
 function parseArgs(argv: string[]): CliArgs {
-  const out: CliArgs = { once: false, clear: true, tmuxLine: false, statusLine: false };
+  const out: CliArgs = { once: false, clear: true, statusLine: false, overview: false, selfCheck: false };
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--once' || arg === 'print') {
       out.once = true;
-    } else if (arg === '--tmux-line' || arg === '--status-line') {
-      out.tmuxLine = arg === '--tmux-line';
-      out.statusLine = arg === '--status-line';
+    } else if (arg === '--status-line') {
+      out.statusLine = true;
       out.clear = false;
+    } else if (arg === '--overview') {
+      out.overview = true;
+    } else if (arg === '--self-check') {
+      out.selfCheck = true;
     } else if (arg === '--no-clear') {
       out.clear = false;
     } else if (arg === '--rollout' && argv[i + 1]) {
@@ -59,20 +67,25 @@ function printHelp(): void {
 Usage:
   codex-hud             Watch latest Codex rollout and refresh HUD
   codex-hud --once      Print once and exit
-  codex-hud --tmux-line --once
   codex-hud --status-line --once
+  codex-hud --overview  Show all active sessions
+  codex-hud --self-check  Validate installation
   codex-hud --rollout <path> [--once]
   codex-hud --session-id <id> [--cwd <path>] [--once]
   codex-hud --codex-home <path>
 
 Options:
   --interval <ms>       Refresh interval (default from ~/.codex-hud/config.json)
-  --tmux-line           Print compact single line for tmux status bar
-  --status-line         Print configured status-line layout (compact or expanded)
+  --status-line         Print status-line (used by codex status_line_command)
+  --overview            Show all active sessions with context usage
+  --self-check          Validate installation and configuration
   --session-id <id>     Resolve the rollout file for one Codex session id
   --cwd <path>          Optional cwd hint when resolving a session id
   --no-clear            Do not clear the terminal between refreshes
   --help                Show this help
+
+Environment:
+  CODEX_STATUS_LINE_ITEMS  Comma-separated codex /statusline items to render
 `);
 }
 
@@ -82,8 +95,29 @@ function sleep(ms: number): Promise<void> {
   });
 }
 
+const queue = createParseQueue();
+
+/** Last frame string for diff rendering — skip output if unchanged. */
+let lastFrame: string | null = null;
+
+function outputFrame(frame: string): void {
+  if (frame === lastFrame) return;
+  lastFrame = frame;
+  process.stdout.write(frame);
+}
+
 async function tick(args: CliArgs): Promise<number> {
   const config = loadConfig();
+
+  // Overview mode: show all sessions.
+  if (args.overview) {
+    const lines = renderOverview(config);
+    const frame = lines.join('\n') + '\n';
+    if (args.clear) process.stdout.write('\x1Bc');
+    outputFrame(frame);
+    return args.intervalMs ?? config.refreshMs;
+  }
+
   const sessionId = args.sessionId ?? process.env.CODEX_HUD_SESSION_ID;
   const cwdHint = args.cwdHint ?? process.env.CODEX_HUD_CWD ?? process.cwd();
   const rolloutPath = args.rolloutPath
@@ -92,22 +126,21 @@ async function tick(args: CliArgs): Promise<number> {
     ?? (cwdHint ? await findLatestRolloutForCwd(cwdHint, args.codexHome) : null)
     ?? await findLatestRollout(args.codexHome);
 
-  if (!rolloutPath) {
-    const waiting = args.tmuxLine || args.statusLine
+  const snapshot = rolloutPath
+    ? await queue.request(rolloutPath)
+    : await buildSnapshotFromEnv();
+
+  if (!rolloutPath && !snapshot.model && snapshot.contextUsedPercent === undefined) {
+    const waiting = args.statusLine
       ? 'HUD waiting: no rollout'
       : '[codex-hud] No rollout file found. Start a Codex session first.';
     console.log(waiting);
     return args.intervalMs ?? config.refreshMs;
   }
 
-  const snapshot = await buildSnapshot(rolloutPath);
-  if (args.tmuxLine) {
-    console.log(renderTmuxLine(snapshot, config));
-    return args.intervalMs ?? config.refreshMs;
-  }
-
   if (args.statusLine) {
-    console.log(renderStatusLine(snapshot, config));
+    const frame = renderStatusLine(snapshot, config) + '\n';
+    outputFrame(frame);
     return args.intervalMs ?? config.refreshMs;
   }
 
@@ -116,19 +149,20 @@ async function tick(args: CliArgs): Promise<number> {
     refreshMs: args.intervalMs ?? config.refreshMs,
   });
 
-  if (args.clear) {
-    process.stdout.write('\x1Bc');
-  }
-
-  for (const line of lines) {
-    console.log(line);
-  }
+  const frame = lines.map((l) => `${l}\n`).join('');
+  if (args.clear) process.stdout.write('\x1Bc');
+  outputFrame(frame);
 
   return args.intervalMs ?? config.refreshMs;
 }
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+
+  if (args.selfCheck) {
+    runSelfCheck();
+    return;
+  }
 
   if (args.once) {
     await tick(args);

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { render, renderStatusLine } from '../dist/render.js';
+import { DEFAULT_BADGES } from '../dist/types.js';
 
 test('render emits claude-style HUD lines from supported Codex data', () => {
   const lines = render(
@@ -48,6 +49,7 @@ test('render emits claude-style HUD lines from supported Codex data', () => {
       showGitFileStats: true,
       sevenDayThreshold: 80,
       contextDisplay: 'both',
+      badges: { ...DEFAULT_BADGES },
     },
   );
 
@@ -57,6 +59,58 @@ test('render emits claude-style HUD lines from supported Codex data', () => {
   assert.ok(lines.some((line) => line.includes('Context')));
   assert.ok(lines.some((line) => line.includes('Bash ×1')));
   assert.ok(lines.some((line) => line.includes('1/2')));
+});
+
+test('statusLineItems filters HUD sections', () => {
+  const snapshot = {
+    sessionPath: '/tmp/rollout.jsonl',
+    cwd: '/repo/project',
+    model: 'gpt-5.4',
+    reasoningEffort: 'low',
+    fastMode: true,
+    gitBranch: 'main',
+    gitDirty: true,
+    turnState: 'idle',
+    contextUsedPercent: 14,
+    contextTokens: 36000,
+    contextWindow: 258000,
+    ratePrimary: { usedPercent: 3 },
+    activeTools: [],
+    recentTools: [],
+    plan: [],
+    compactCount: 0,
+    // Only model + context selected via /statusline
+    statusLineItems: new Set(['model-with-reasoning', 'context-used']),
+  };
+  const config = {
+    preset: 'essential',
+    refreshMs: 700,
+    lineLayout: 'expanded',
+    pathLevels: 2,
+    maxTools: 3,
+    showTools: true,
+    showPlan: true,
+    showRates: true,
+    showSessionPath: false,
+    showGitAheadBehind: true,
+    showGitFileStats: false,
+    showEnvironment: false,
+    sevenDayThreshold: 60,
+    contextDisplay: 'both',
+    badges: { ...DEFAULT_BADGES },
+  };
+  const lines = render(snapshot, config);
+  // Model badge should be present
+  assert.ok(lines[0].includes('g5.4'));
+  // Git and project path should NOT be present (not in items)
+  assert.ok(!lines[0].includes('git:('));
+  assert.ok(!lines[0].includes('repo/project'));
+  // Context should be present
+  assert.ok(lines.some((l) => l.includes('Context')));
+  // Usage (five-hour-limit) should NOT be present
+  assert.ok(!lines.some((l) => l.includes('Usage')));
+  // Fast mode should NOT be present (not in items)
+  assert.ok(!lines[0].includes('fast mode on'));
 });
 
 test('renderStatusLine resolves compact preset into one line', () => {
@@ -91,6 +145,7 @@ test('renderStatusLine resolves compact preset into one line', () => {
       showGitFileStats: false,
       sevenDayThreshold: 80,
       contextDisplay: 'percent',
+      badges: { ...DEFAULT_BADGES },
     },
   );
 

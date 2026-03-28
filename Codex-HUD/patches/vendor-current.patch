@@ -1,3 +1,782 @@
+diff --git a/codex-rs/Cargo.lock b/codex-rs/Cargo.lock
+index 3327b8c..c36ff66 100644
+--- a/codex-rs/Cargo.lock
++++ b/codex-rs/Cargo.lock
+@@ -402,7 +402,7 @@ checksum = "5f0e0fee31ef5ed1ba1316088939cea399010ed7731dba877ed44aeb407a75ea"
+ 
+ [[package]]
+ name = "app_test_support"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "base64 0.22.1",
+@@ -1335,7 +1335,7 @@ checksum = "e9b18233253483ce2f65329a24072ec414db782531bdbb7d0bbc4bd2ce6b7e21"
+ 
+ [[package]]
+ name = "codex-analytics"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "codex-git-utils",
+  "codex-login",
+@@ -1351,7 +1351,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-ansi-escape"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "ansi-to-tui",
+  "ratatui",
+@@ -1360,7 +1360,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-api"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "assert_matches",
+@@ -1390,7 +1390,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-app-server"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "app_test_support",
+@@ -1454,7 +1454,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-app-server-client"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "codex-app-server",
+  "codex-app-server-protocol",
+@@ -1475,7 +1475,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-app-server-protocol"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "clap",
+@@ -1503,7 +1503,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-app-server-test-client"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "clap",
+@@ -1524,7 +1524,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-apply-patch"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "assert_cmd",
+@@ -1540,7 +1540,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-arg0"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "codex-apply-patch",
+@@ -1555,7 +1555,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-async-utils"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "async-trait",
+  "pretty_assertions",
+@@ -1565,7 +1565,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-backend-client"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "codex-backend-openapi-models",
+@@ -1580,7 +1580,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-backend-openapi-models"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "serde",
+  "serde_json",
+@@ -1589,7 +1589,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-chatgpt"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "clap",
+@@ -1608,7 +1608,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-cli"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "assert_cmd",
+@@ -1657,7 +1657,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-client"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "async-trait",
+  "bytes",
+@@ -1687,7 +1687,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-cloud-requirements"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "async-trait",
+  "base64 0.22.1",
+@@ -1710,7 +1710,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-cloud-tasks"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "async-trait",
+@@ -1741,7 +1741,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-cloud-tasks-client"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "async-trait",
+@@ -1756,7 +1756,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-code-mode"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "async-trait",
+  "pretty_assertions",
+@@ -1770,7 +1770,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-config"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "codex-app-server-protocol",
+@@ -1794,7 +1794,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-connectors"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "codex-app-server-protocol",
+@@ -1806,7 +1806,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-core"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "arc-swap",
+@@ -1926,7 +1926,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-core-skills"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "codex-analytics",
+@@ -1955,7 +1955,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-debug-client"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "clap",
+@@ -1967,7 +1967,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-exec"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "assert_cmd",
+@@ -2009,7 +2009,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-exec-server"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "arc-swap",
+@@ -2034,7 +2034,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-execpolicy"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "clap",
+@@ -2051,7 +2051,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-execpolicy-legacy"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "allocative",
+  "anyhow",
+@@ -2071,7 +2071,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-experimental-api-macros"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "proc-macro2",
+  "quote",
+@@ -2080,7 +2080,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-features"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "codex-login",
+  "codex-otel",
+@@ -2094,7 +2094,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-feedback"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "codex-protocol",
+@@ -2106,7 +2106,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-file-search"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "clap",
+@@ -2122,7 +2122,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-git-utils"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "assert_matches",
+  "codex-utils-absolute-path",
+@@ -2141,7 +2141,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-hooks"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "chrono",
+@@ -2159,7 +2159,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-instructions"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "codex-protocol",
+  "pretty_assertions",
+@@ -2168,7 +2168,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-keyring-store"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "keyring",
+  "tracing",
+@@ -2176,7 +2176,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-linux-sandbox"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "cc",
+  "clap",
+@@ -2198,7 +2198,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-lmstudio"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "codex-core",
+  "reqwest",
+@@ -2211,7 +2211,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-login"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "async-trait",
+@@ -2250,7 +2250,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-mcp-server"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "codex-arg0",
+@@ -2279,7 +2279,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-network-proxy"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "async-trait",
+@@ -2310,7 +2310,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-ollama"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "assert_matches",
+  "async-stream",
+@@ -2328,7 +2328,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-otel"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "chrono",
+  "codex-api",
+@@ -2360,7 +2360,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-plugin"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "codex-utils-absolute-path",
+  "codex-utils-plugins",
+@@ -2369,7 +2369,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-process-hardening"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "libc",
+  "pretty_assertions",
+@@ -2377,7 +2377,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-protocol"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "codex-execpolicy",
+@@ -2406,7 +2406,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-responses-api-proxy"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "clap",
+@@ -2422,7 +2422,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-rmcp-client"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "axum",
+@@ -2456,7 +2456,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-rollout"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "async-trait",
+@@ -2481,7 +2481,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-sandboxing"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "codex-network-proxy",
+  "codex-protocol",
+@@ -2498,7 +2498,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-secrets"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "age",
+  "anyhow",
+@@ -2519,7 +2519,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-shell-command"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "base64 0.22.1",
+@@ -2539,7 +2539,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-shell-escalation"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "async-trait",
+@@ -2560,7 +2560,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-skills"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "codex-utils-absolute-path",
+  "include_dir",
+@@ -2569,7 +2569,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-state"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "chrono",
+@@ -2592,7 +2592,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-stdio-to-uds"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "codex-utils-cargo-bin",
+@@ -2603,7 +2603,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-terminal-detection"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "pretty_assertions",
+  "tracing",
+@@ -2611,7 +2611,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-tools"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "codex-protocol",
+  "pretty_assertions",
+@@ -2622,7 +2622,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-tui"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "arboard",
+@@ -2715,7 +2715,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-utils-absolute-path"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "dirs",
+  "path-absolutize",
+@@ -2729,14 +2729,14 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-utils-approval-presets"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "codex-protocol",
+ ]
+ 
+ [[package]]
+ name = "codex-utils-cache"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "lru 0.16.3",
+  "sha1",
+@@ -2745,7 +2745,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-utils-cargo-bin"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "assert_cmd",
+  "runfiles",
+@@ -2754,7 +2754,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-utils-cli"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "clap",
+  "codex-protocol",
+@@ -2765,15 +2765,15 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-utils-elapsed"
+-version = "0.0.0"
++version = "0.117.0"
+ 
+ [[package]]
+ name = "codex-utils-fuzzy-match"
+-version = "0.0.0"
++version = "0.117.0"
+ 
+ [[package]]
+ name = "codex-utils-home-dir"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "dirs",
+  "pretty_assertions",
+@@ -2782,7 +2782,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-utils-image"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "base64 0.22.1",
+  "codex-utils-cache",
+@@ -2794,7 +2794,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-utils-json-to-toml"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "pretty_assertions",
+  "serde_json",
+@@ -2803,7 +2803,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-utils-oss"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "codex-core",
+  "codex-lmstudio",
+@@ -2812,7 +2812,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-utils-output-truncation"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "codex-protocol",
+  "codex-utils-string",
+@@ -2821,7 +2821,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-utils-path"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "codex-utils-absolute-path",
+  "dunce",
+@@ -2831,7 +2831,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-utils-plugins"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "serde",
+  "serde_json",
+@@ -2840,7 +2840,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-utils-pty"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "filedescriptor",
+@@ -2856,7 +2856,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-utils-readiness"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "assert_matches",
+  "async-trait",
+@@ -2867,14 +2867,14 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-utils-rustls-provider"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "rustls",
+ ]
+ 
+ [[package]]
+ name = "codex-utils-sandbox-summary"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "codex-core",
+  "codex-protocol",
+@@ -2884,7 +2884,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-utils-sleep-inhibitor"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "core-foundation 0.9.4",
+  "libc",
+@@ -2894,14 +2894,14 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-utils-stream-parser"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "pretty_assertions",
+ ]
+ 
+ [[package]]
+ name = "codex-utils-string"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "pretty_assertions",
+  "regex-lite",
+@@ -2909,14 +2909,14 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-utils-template"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "pretty_assertions",
+ ]
+ 
+ [[package]]
+ name = "codex-v8-poc"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "pretty_assertions",
+  "v8",
+@@ -2924,7 +2924,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "codex-windows-sandbox"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "base64 0.22.1",
+@@ -3138,7 +3138,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "core_test_support"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "assert_cmd",
+@@ -5964,7 +5964,7 @@ checksum = "b3eede3bdf92f3b4f9dc04072a9ce5ab557d5ec9038773bf9ffcd5588b3cc05b"
+ 
+ [[package]]
+ name = "mcp_test_support"
+-version = "0.0.0"
++version = "0.117.0"
+ dependencies = [
+  "anyhow",
+  "codex-core",
+diff --git a/codex-rs/Cargo.toml b/codex-rs/Cargo.toml
+index 2f4b952..d6f1be9 100644
+--- a/codex-rs/Cargo.toml
++++ b/codex-rs/Cargo.toml
+@@ -85,7 +85,7 @@ members = [
+ resolver = "2"
+ 
+ [workspace.package]
+-version = "0.0.0"
++version = "0.117.0"
+ # Track the edition for all workspace crates in one place. Individual
+ # crates can still override this value, but keeping it here means new
+ # crates created with `cargo new -w ...` automatically inherit the 2024
 diff --git a/codex-rs/cli/src/main.rs b/codex-rs/cli/src/main.rs
 index 4bf6dde..1da9f7d 100644
 --- a/codex-rs/cli/src/main.rs
@@ -143,7 +922,7 @@ index e652cb2..c28c09c 100644
      StatusLineSetup {
          items: Vec<StatusLineItem>,
 diff --git a/codex-rs/tui_app_server/src/bottom_pane/chat_composer.rs b/codex-rs/tui_app_server/src/bottom_pane/chat_composer.rs
-index 7a8fa25..745e863 100644
+index 7a8fa25..a1ec14c 100644
 --- a/codex-rs/tui_app_server/src/bottom_pane/chat_composer.rs
 +++ b/codex-rs/tui_app_server/src/bottom_pane/chat_composer.rs
 @@ -125,6 +125,7 @@
@@ -162,27 +941,24 @@ index 7a8fa25..745e863 100644
  use super::footer::reset_mode_after_activity;
  use super::footer::single_line_footer_layout;
  use super::footer::toggle_shortcut_mode;
-@@ -410,6 +412,10 @@ pub(crate) struct ChatComposer {
+@@ -410,6 +412,8 @@ pub(crate) struct ChatComposer {
      audio_device_selection_enabled: bool,
      windows_degraded_sandbox_active: bool,
      status_line_value: Option<Line<'static>>,
 +    /// Raw string value of the status line, preserving newlines that `Line::from()` strips.
 +    status_line_raw_value: Option<String>,
-+    /// Last known footer content width available to the external status-line command.
-+    status_line_available_width: std::cell::Cell<Option<usize>>,
      status_line_enabled: bool,
      // Agent label injected into the footer's contextual row when multi-agent mode is active.
      active_agent_label: Option<String>,
-@@ -534,6 +540,8 @@ impl ChatComposer {
+@@ -534,6 +538,7 @@ impl ChatComposer {
              audio_device_selection_enabled: false,
              windows_degraded_sandbox_active: false,
              status_line_value: None,
 +            status_line_raw_value: None,
-+            status_line_available_width: std::cell::Cell::new(None),
              status_line_enabled: false,
              active_agent_label: None,
          };
-@@ -3219,6 +3227,7 @@ impl ChatComposer {
+@@ -3219,6 +3224,7 @@ impl ChatComposer {
              context_window_percent: self.context_window_percent,
              context_window_used_tokens: self.context_window_used_tokens,
              status_line_value: self.status_line_value.clone(),
@@ -190,7 +966,7 @@ index 7a8fa25..745e863 100644
              status_line_enabled: self.status_line_enabled,
              active_agent_label: self.active_agent_label.clone(),
          }
-@@ -3257,6 +3266,24 @@ impl ChatComposer {
+@@ -3257,6 +3263,24 @@ impl ChatComposer {
          if self.footer_flash_visible() {
              return Some(1);
          }
@@ -215,7 +991,7 @@ index 7a8fa25..745e863 100644
          self.footer_hint_override
              .as_ref()
              .map(|items| if items.is_empty() { 0 } else { 1 })
-@@ -3787,6 +3814,14 @@ impl ChatComposer {
+@@ -3787,6 +3811,10 @@ impl ChatComposer {
          true
      }
  
@@ -223,18 +999,12 @@ index 7a8fa25..745e863 100644
 +        self.status_line_raw_value = raw;
 +    }
 +
-+    pub(crate) fn status_line_available_width(&self) -> Option<usize> {
-+        self.status_line_available_width.get()
-+    }
-+
      pub(crate) fn set_status_line_enabled(&mut self, enabled: bool) -> bool {
          if self.status_line_enabled == enabled {
              return false;
-@@ -4240,19 +4275,44 @@ impl ChatComposer {
-                 };
+@@ -4241,18 +4269,42 @@ impl ChatComposer {
                  let available_width =
                      hint_rect.width.saturating_sub(FOOTER_INDENT_COLS as u16) as usize;
-+                self.status_line_available_width.set(Some(available_width));
                  let status_line_active = uses_passive_footer_status_layout(&footer_props);
 -                let combined_status_line = if status_line_active {
 -                    passive_footer_status_line(&footer_props).map(ratatui::prelude::Stylize::dim)
@@ -280,7 +1050,7 @@ index 7a8fa25..745e863 100644
                  let left_mode_indicator = if status_line_active {
                      None
                  } else {
-@@ -4266,8 +4326,9 @@ impl ChatComposer {
+@@ -4266,8 +4318,9 @@ impl ChatComposer {
                  } else if let Some(items) = self.footer_hint_override.as_ref() {
                      footer_hint_items_width(items)
                  } else if status_line_active {
@@ -291,7 +1061,7 @@ index 7a8fa25..745e863 100644
                          .map(|line| line.width() as u16)
                          .unwrap_or(0)
                  } else {
-@@ -4280,17 +4341,21 @@ impl ChatComposer {
+@@ -4280,17 +4333,21 @@ impl ChatComposer {
                      )
                  };
                  let right_line = if status_line_active {
@@ -323,7 +1093,7 @@ index 7a8fa25..745e863 100644
                      }
                  } else {
                      Some(context_window_line(
-@@ -4302,12 +4367,17 @@ impl ChatComposer {
+@@ -4302,12 +4359,17 @@ impl ChatComposer {
                  if status_line_active
                      && let Some(max_left) = max_left_width_for_right(hint_rect, right_width)
                      && left_width > max_left
@@ -346,7 +1116,7 @@ index 7a8fa25..745e863 100644
                  }
                  let can_show_left_and_context =
                      can_show_left_with_context(hint_rect, left_width, right_width);
-@@ -4354,8 +4424,12 @@ impl ChatComposer {
+@@ -4354,8 +4416,12 @@ impl ChatComposer {
                      match summary_left {
                          SummaryLeft::Default => {
                              if status_line_active {
@@ -361,7 +1131,7 @@ index 7a8fa25..745e863 100644
                                  } else {
                                      render_footer_from_props(
                                          hint_rect,
-@@ -4391,8 +4465,12 @@ impl ChatComposer {
+@@ -4391,8 +4457,12 @@ impl ChatComposer {
                  } else if let Some(items) = self.footer_hint_override.as_ref() {
                      render_footer_hint_items(hint_rect, buf, items);
                  } else if status_line_active {
@@ -684,10 +1454,10 @@ index c8148c9..2132028 100644
              active_agent_label: None,
          };
 diff --git a/codex-rs/tui_app_server/src/bottom_pane/mod.rs b/codex-rs/tui_app_server/src/bottom_pane/mod.rs
-index d74f05b..9af296e 100644
+index d74f05b..cc19739 100644
 --- a/codex-rs/tui_app_server/src/bottom_pane/mod.rs
 +++ b/codex-rs/tui_app_server/src/bottom_pane/mod.rs
-@@ -1177,12 +1177,17 @@ impl BottomPane {
+@@ -1177,7 +1177,8 @@ impl BottomPane {
          }
      }
  
@@ -697,15 +1467,6 @@ index d74f05b..9af296e 100644
          if self.composer.set_status_line(status_line) {
              self.request_redraw();
          }
-     }
- 
-+    pub(crate) fn status_line_available_width(&self) -> Option<usize> {
-+        self.composer.status_line_available_width()
-+    }
-+
-     pub(crate) fn set_status_line_enabled(&mut self, enabled: bool) {
-         if self.composer.set_status_line_enabled(enabled) {
-             self.request_redraw();
 diff --git a/codex-rs/tui_app_server/src/chatwidget.rs b/codex-rs/tui_app_server/src/chatwidget.rs
 index a343a41..3f329ab 100644
 --- a/codex-rs/tui_app_server/src/chatwidget.rs
@@ -858,7 +1619,7 @@ index a343a41..3f329ab 100644
              .bottom_pane
              .set_collaboration_modes_enabled(/*enabled*/ true);
 diff --git a/codex-rs/tui_app_server/src/chatwidget/status_surfaces.rs b/codex-rs/tui_app_server/src/chatwidget/status_surfaces.rs
-index d80003c..a49bc24 100644
+index d80003c..fa9a8f7 100644
 --- a/codex-rs/tui_app_server/src/chatwidget/status_surfaces.rs
 +++ b/codex-rs/tui_app_server/src/chatwidget/status_surfaces.rs
 @@ -135,26 +135,53 @@ impl ChatWidget {
@@ -922,7 +1683,7 @@ index d80003c..a49bc24 100644
      }
  
      /// Clears the terminal title Codex most recently wrote, if any.
-@@ -413,6 +440,156 @@ impl ChatWidget {
+@@ -413,6 +440,153 @@ impl ChatWidget {
          });
      }
  
@@ -943,9 +1704,6 @@ index d80003c..a49bc24 100644
 +    /// Collects codex runtime data as env vars for the external status command.
 +    fn status_line_command_env_vars(&mut self) -> Vec<(String, String)> {
 +        let mut vars = Vec::new();
-+        if let Some(width) = self.bottom_pane.status_line_available_width() {
-+            vars.push(("CODEX_HUD_WIDTH".into(), width.to_string()));
-+        }
 +        if let Some(pct) = self.status_line_context_used_percent() {
 +            vars.push(("CODEX_CONTEXT_USED_PCT".into(), pct.to_string()));
 +        }
