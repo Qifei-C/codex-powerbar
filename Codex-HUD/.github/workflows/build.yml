@@ -1,0 +1,74 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hud-tests:
+    name: HUD Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+  patched-codex-build:
+    name: Patched Codex Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang build-essential cmake pkg-config libcap-dev libseccomp-dev
+
+      - name: Clone upstream Codex
+        run: git clone --depth 1 https://github.com/openai/codex /tmp/openai-codex
+
+      - name: Apply patch
+        run: |
+          git -C /tmp/openai-codex apply --check "$GITHUB_WORKSPACE/patches/codex-statusline-command.patch"
+          git -C /tmp/openai-codex apply "$GITHUB_WORKSPACE/patches/codex-statusline-command.patch"
+
+      - name: Build patched codex
+        run: cargo build --release -p codex-cli --manifest-path /tmp/openai-codex/codex-rs/Cargo.toml
+
+      - name: Stage artifact
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/artifacts"
+          cp /tmp/openai-codex/codex-rs/target/release/codex "$GITHUB_WORKSPACE/artifacts/codex-${{ runner.os }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-${{ runner.os }}
+          path: artifacts/codex-${{ runner.os }}

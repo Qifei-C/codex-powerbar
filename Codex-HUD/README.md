@@ -1,6 +1,6 @@
-# Codex HUD (macOS Fork)
+# Codex Powerbar
 
-A macOS-compatible fork of [anhannin/codex-hud](https://github.com/anhannin/codex-hud) — a real-time status line HUD for [Codex CLI](https://github.com/openai/codex).
+Codex Powerbar is a real-time status line HUD for [Codex CLI](https://github.com/openai/codex), built around a patched Codex TUI plus a custom external HUD renderer.
 
 ![Codex HUD screenshot](docs/assets/hud-example.png)
 
@@ -12,8 +12,8 @@ A macOS-compatible fork of [anhannin/codex-hud](https://github.com/anhannin/code
 
 ## Quick Start
 ```bash
-git clone https://github.com/Qifei-C/codex-HUD.git
-cd codex-HUD/Codex-HUD
+git clone https://github.com/Qifei-C/codex-powerbar.git
+cd codex-powerbar
 ./install.sh
 ```
 
@@ -63,8 +63,8 @@ Minimum pre-release checklist:
 
 Quick install for users:
 ```bash
-git clone https://github.com/Qifei-C/codex-HUD.git
-cd codex-HUD/Codex-HUD
+git clone https://github.com/Qifei-C/codex-powerbar.git
+cd codex-powerbar
 ./install.sh
 ```
 
@@ -87,11 +87,11 @@ HUD • g5.3c • Usage ██░░░░░░░░ 25% (1h 30m / 5h) | █�
 - `tmux: command not found`: tmux mode is optional, not required
 
 ## Upstream
-- Original project: [anhannin/codex-hud](https://github.com/anhannin/codex-hud)
+- Original project inspiration: [anhannin/codex-hud](https://github.com/anhannin/codex-hud)
 - Sync upstream: `git fetch upstream && git merge upstream/master`
 
 ## Support
-- Bug reports: [github.com/Qifei-C/codex-HUD/issues](https://github.com/Qifei-C/codex-HUD/issues)
+- Bug reports: [github.com/Qifei-C/codex-powerbar/issues](https://github.com/Qifei-C/codex-powerbar/issues)
 - Upstream issues: [github.com/anhannin/codex-hud/issues](https://github.com/anhannin/codex-hud/issues)
 
 ## Project Layout
