@@ -194,6 +194,49 @@ test('mergeSnapshotsPreferEnv keeps env-backed values and falls back to rollout 
   }
 });
 
+test('mergeSnapshotsPreferEnv preserves rollout plan labels when env only provides progress counts', () => {
+  const prevEnv = { ...process.env };
+  process.env.CODEX_PLAN_COMPLETED = '1';
+  process.env.CODEX_PLAN_TOTAL = '3';
+
+  try {
+    const merged = mergeSnapshotsPreferEnv(
+      {
+        sessionPath: '',
+        turnState: 'idle',
+        activeTools: [],
+        recentTools: [],
+        plan: [
+          { status: 'completed', step: 'Step 1' },
+          { status: 'in_progress', step: 'Step 2' },
+          { status: 'pending', step: 'Step 3' },
+        ],
+        compactCount: 0,
+      },
+      {
+        sessionPath: '/tmp/rollout.jsonl',
+        turnState: 'idle',
+        activeTools: [],
+        recentTools: [],
+        plan: [
+          { status: 'pending', step: 'Read repository' },
+          { status: 'pending', step: 'Implement parser' },
+          { status: 'pending', step: 'Run tests' },
+        ],
+        compactCount: 0,
+      },
+    );
+
+    assert.deepEqual(merged.plan, [
+      { status: 'completed', step: 'Read repository' },
+      { status: 'in_progress', step: 'Implement parser' },
+      { status: 'pending', step: 'Run tests' },
+    ]);
+  } finally {
+    process.env = prevEnv;
+  }
+});
+
 test('mergeSnapshotsPreferEnv preserves rollout rate reset times when env only provides percentages', () => {
   const prevEnv = { ...process.env };
   process.env.CODEX_RATE_PRIMARY_PCT = '12';

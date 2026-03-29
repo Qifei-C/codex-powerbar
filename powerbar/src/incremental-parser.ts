@@ -564,12 +564,7 @@ function applyCodexEnvOverrides(snapshot: HudSnapshot): void {
   const planCompleted = Number.parseInt(process.env.CODEX_PLAN_COMPLETED ?? '', 10);
   const planTotal = Number.parseInt(process.env.CODEX_PLAN_TOTAL ?? '', 10);
   if (!Number.isNaN(planCompleted) && !Number.isNaN(planTotal) && planTotal > 0) {
-    // Build minimal plan items from counts (no step names available via env).
-    const plan = [];
-    for (let i = 0; i < planTotal; i++) {
-      plan.push({ status: i < planCompleted ? 'completed' : 'pending', step: `Step ${i + 1}` });
-    }
-    snapshot.plan = plan;
+    snapshot.plan = buildPlanFromProgress(planCompleted, planTotal);
   }
 
   // Running tool count — create placeholder active tools.
@@ -669,6 +664,43 @@ function hasEnvVar(name: string): boolean {
   return process.env[name] !== undefined;
 }
 
+function buildPlanFromProgress(completed: number, total: number): PlanItem[] {
+  const safeTotal = Math.max(0, total);
+  const safeCompleted = Math.max(0, Math.min(completed, safeTotal));
+  const plan: PlanItem[] = [];
+
+  for (let i = 0; i < safeTotal; i += 1) {
+    let status = 'pending';
+    if (i < safeCompleted) {
+      status = 'completed';
+    } else if (i === safeCompleted && safeCompleted < safeTotal) {
+      status = 'in_progress';
+    }
+    plan.push({ status, step: `Step ${i + 1}` });
+  }
+
+  return plan;
+}
+
+function isPlaceholderPlan(plan: PlanItem[]): boolean {
+  return plan.length > 0 && plan.every((item, index) => item.step === `Step ${index + 1}`);
+}
+
+function mergePlanPreferEnv(envPlan: PlanItem[], rolloutPlan: PlanItem[]): PlanItem[] {
+  if (!hasEnvVar('CODEX_PLAN_TOTAL')) return rolloutPlan;
+  if (envPlan.length === 0) return rolloutPlan;
+  if (rolloutPlan.length === 0) return envPlan;
+
+  if (isPlaceholderPlan(envPlan) && envPlan.length === rolloutPlan.length) {
+    return rolloutPlan.map((item, index) => ({
+      ...item,
+      status: envPlan[index]?.status ?? item.status,
+    }));
+  }
+
+  return envPlan;
+}
+
 function mergeRateWindowPreferEnv(
   prefix: 'CODEX_RATE_PRIMARY' | 'CODEX_RATE_SECONDARY',
   envWindow?: RateWindow,
@@ -703,7 +735,7 @@ export function mergeSnapshotsPreferEnv(envSnapshot: HudSnapshot, rolloutSnapsho
     compactCount: rolloutSnapshot.compactCount,
     recentTools: rolloutSnapshot.recentTools,
     activeTools: hasEnvVar('CODEX_RUNNING_TOOLS') ? envSnapshot.activeTools : rolloutSnapshot.activeTools,
-    plan: hasEnvVar('CODEX_PLAN_TOTAL') ? envSnapshot.plan : rolloutSnapshot.plan,
+    plan: mergePlanPreferEnv(envSnapshot.plan, rolloutSnapshot.plan),
     turnState: hasEnvVar('CODEX_TURN_STATE') ? envSnapshot.turnState : rolloutSnapshot.turnState,
     environment: envSnapshot.environment ?? rolloutSnapshot.environment,
     ratePrimary: mergeRateWindowPreferEnv('CODEX_RATE_PRIMARY', envSnapshot.ratePrimary, rolloutSnapshot.ratePrimary),
