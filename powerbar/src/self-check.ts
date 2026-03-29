@@ -44,9 +44,9 @@ export function runSelfCheck(): void {
     return commandVersion('codex', ['--version']);
   }));
 
-  // codex-hud installation
-  results.push(check('codex-hud', () => {
-    const hudBin = path.join(os.homedir(), '.local', 'bin', 'codex-hud');
+  // powerbar installation
+  results.push(check('powerbar', () => {
+    const hudBin = path.join(os.homedir(), '.local', 'bin', 'powerbar');
     if (fs.existsSync(hudBin)) {
       return `found at ${hudBin}`;
     }
@@ -62,9 +62,9 @@ export function runSelfCheck(): void {
     return 'found, no config.toml';
   }));
 
-  // ~/.codex-hud directory
-  results.push(check('~/.codex-hud dir', () => {
-    const dir = path.join(os.homedir(), '.codex-hud');
+  // ~/.powerbar directory
+  results.push(check('~/.powerbar dir', () => {
+    const dir = path.join(os.homedir(), '.powerbar');
     if (!fs.existsSync(dir)) return 'not found';
     const configFile = path.join(dir, 'config.json');
     if (fs.existsSync(configFile)) return `found, config.json exists`;
@@ -99,7 +99,7 @@ export function runSelfCheck(): void {
   }));
 
   // Print results
-  console.log('codex-hud self-check\n');
+  console.log('powerbar self-check\n');
   let allOk = true;
   for (const r of results) {
     const icon = r.ok ? '\x1b[32m✓\x1b[0m' : '\x1b[31m✗\x1b[0m';

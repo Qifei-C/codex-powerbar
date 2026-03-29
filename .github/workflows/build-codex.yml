@@ -7,19 +7,19 @@ on:
     tags: ['codex-v*']
     paths:
       - '.github/workflows/build-codex.yml'
-      - 'Codex-HUD/**'
+      - 'powerbar/**'
       - 'README.md'
   pull_request:
     branches:
       - master
     paths:
       - '.github/workflows/build-codex.yml'
-      - 'Codex-HUD/**'
+      - 'powerbar/**'
       - 'README.md'
   workflow_dispatch:
     inputs:
       codex_ref:
-        description: 'OpenAI Codex git ref to build against (tag, branch, or SHA). Leave empty to use the install.sh release target.'
+        description: 'OpenAI Codex git ref to build against (tag, branch, or SHA). Leave empty to use the install.sh source-build target.'
         required: false
         default: ''
       fast_build:
@@ -36,9 +36,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  HUD_DIR: Codex-HUD
+  HUD_DIR: powerbar
   CODEX_UPSTREAM: https://github.com/openai/codex.git
-  PATCH_FILE: Codex-HUD/patches/codex-statusline-command.patch
+  PATCH_FILE: powerbar/patches/codex-statusline-command.patch
 
 jobs:
   hud-tests:
@@ -54,14 +54,14 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: Codex-HUD/package-lock.json
+          cache-dependency-path: powerbar/package-lock.json
 
       - name: Install HUD dependencies
-        working-directory: Codex-HUD
+        working-directory: powerbar
         run: npm ci
 
       - name: Run HUD tests
-        working-directory: Codex-HUD
+        working-directory: powerbar
         run: npm test
 
   build:
@@ -90,19 +90,16 @@ jobs:
       - name: Determine codex ref
         id: plan
         run: |
-          release_tag="$(sed -n 's/^PREBUILT_RELEASE_TAG="\(.*\)"/\1/p' "$HUD_DIR/install.sh" | head -n1)"
-          if [[ -z "$release_tag" ]]; then
-            echo "Failed to read PREBUILT_RELEASE_TAG from $HUD_DIR/install.sh" >&2
+          source_ref="$(sed -n 's/^SOURCE_BUILD_CODEX_REF="\(.*\)"/\1/p' "$HUD_DIR/install.sh" | head -n1)"
+          if [[ -z "$source_ref" ]]; then
+            echo "Failed to read SOURCE_BUILD_CODEX_REF from $HUD_DIR/install.sh" >&2
             exit 1
           fi
 
-          default_ref="${release_tag#codex-}"
           if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.codex_ref }}" ]]; then
             codex_ref="${{ inputs.codex_ref }}"
-          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            codex_ref="${GITHUB_REF_NAME#codex-}"
           else
-            codex_ref="$default_ref"
+            codex_ref="$source_ref"
           fi
 
           fast_build="false"
@@ -110,7 +107,7 @@ jobs:
             fast_build="true"
           fi
 
-          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+          echo "source_ref=$source_ref" >> "$GITHUB_OUTPUT"
           echo "codex_ref=$codex_ref" >> "$GITHUB_OUTPUT"
           echo "fast_build=$fast_build" >> "$GITHUB_OUTPUT"
 
@@ -137,7 +134,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             codex-upstream/codex-rs/target
-          key: build-codex-${{ runner.os }}-${{ matrix.target }}-${{ steps.plan.outputs.codex_ref }}-${{ hashFiles('Codex-HUD/patches/codex-statusline-command.patch') }}
+          key: build-codex-${{ runner.os }}-${{ matrix.target }}-${{ steps.plan.outputs.codex_ref }}-${{ hashFiles('powerbar/patches/codex-statusline-command.patch') }}
           restore-keys: |
             build-codex-${{ runner.os }}-${{ matrix.target }}-${{ steps.plan.outputs.codex_ref }}-
             build-codex-${{ runner.os }}-${{ matrix.target }}-
@@ -221,7 +218,7 @@ jobs:
           ## Install
           \`\`\`bash
           # Automatic (tries prebuilt first, falls back to source)
-          ./Codex-HUD/install.sh --full
+          ./powerbar/install.sh --full
 
           # Manual
           curl -fSL https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/codex-darwin-arm64.tar.gz | tar xz

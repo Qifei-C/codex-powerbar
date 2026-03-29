@@ -1,5 +1,5 @@
 diff --git a/codex-rs/cli/src/main.rs b/codex-rs/cli/src/main.rs
-index 4bf6dde..1da9f7d 100644
+index 082965b..b41b6f4 100644
 --- a/codex-rs/cli/src/main.rs
 +++ b/codex-rs/cli/src/main.rs
 @@ -455,7 +455,13 @@ fn handle_app_exit(exit_info: AppExitInfo) -> anyhow::Result<()> {
@@ -18,7 +18,7 @@ index 4bf6dde..1da9f7d 100644
      }
      if let Some(action) = update_action {
 diff --git a/codex-rs/core/src/config/config_tests.rs b/codex-rs/core/src/config/config_tests.rs
-index 60f0e06..398ff3a 100644
+index 00227fe..c4ef55c 100644
 --- a/codex-rs/core/src/config/config_tests.rs
 +++ b/codex-rs/core/src/config/config_tests.rs
 @@ -262,6 +262,7 @@ fn config_toml_deserializes_model_availability_nux() {
@@ -29,7 +29,7 @@ index 60f0e06..398ff3a 100644
              terminal_title: None,
              theme: None,
              model_availability_nux: ModelAvailabilityNuxConfig {
-@@ -956,6 +957,7 @@ fn tui_config_missing_notifications_field_defaults_to_enabled() {
+@@ -959,6 +960,7 @@ fn tui_config_missing_notifications_field_defaults_to_enabled() {
              show_tooltips: true,
              alternate_screen: AltScreenMode::Auto,
              status_line: None,
@@ -37,7 +37,7 @@ index 60f0e06..398ff3a 100644
              terminal_title: None,
              theme: None,
              model_availability_nux: ModelAvailabilityNuxConfig::default(),
-@@ -4472,6 +4474,7 @@ fn test_precedence_fixture_with_o3_profile() -> std::io::Result<()> {
+@@ -4476,6 +4478,7 @@ fn test_precedence_fixture_with_o3_profile() -> std::io::Result<()> {
              tool_suggest: ToolSuggestConfig::default(),
              tui_alternate_screen: AltScreenMode::Auto,
              tui_status_line: None,
@@ -45,7 +45,7 @@ index 60f0e06..398ff3a 100644
              tui_terminal_title: None,
              tui_theme: None,
              otel: OtelConfig::default(),
-@@ -4614,6 +4617,7 @@ fn test_precedence_fixture_with_gpt3_profile() -> std::io::Result<()> {
+@@ -4618,6 +4621,7 @@ fn test_precedence_fixture_with_gpt3_profile() -> std::io::Result<()> {
          tool_suggest: ToolSuggestConfig::default(),
          tui_alternate_screen: AltScreenMode::Auto,
          tui_status_line: None,
@@ -53,7 +53,7 @@ index 60f0e06..398ff3a 100644
          tui_terminal_title: None,
          tui_theme: None,
          otel: OtelConfig::default(),
-@@ -4754,6 +4758,7 @@ fn test_precedence_fixture_with_zdr_profile() -> std::io::Result<()> {
+@@ -4758,6 +4762,7 @@ fn test_precedence_fixture_with_zdr_profile() -> std::io::Result<()> {
          tool_suggest: ToolSuggestConfig::default(),
          tui_alternate_screen: AltScreenMode::Auto,
          tui_status_line: None,
@@ -61,7 +61,7 @@ index 60f0e06..398ff3a 100644
          tui_terminal_title: None,
          tui_theme: None,
          otel: OtelConfig::default(),
-@@ -4880,6 +4885,7 @@ fn test_precedence_fixture_with_gpt5_profile() -> std::io::Result<()> {
+@@ -4884,6 +4889,7 @@ fn test_precedence_fixture_with_gpt5_profile() -> std::io::Result<()> {
          tool_suggest: ToolSuggestConfig::default(),
          tui_alternate_screen: AltScreenMode::Auto,
          tui_status_line: None,
@@ -112,16 +112,16 @@ index 05fbaaa..887184d 100644
      ///
      /// When set, the TUI renders the selected items into the terminal window/tab title.
 diff --git a/codex-rs/tui/src/app.rs b/codex-rs/tui/src/app.rs
-index 945bf0f..9e41463 100644
+index 3945f32..f4c1097 100644
 --- a/codex-rs/tui/src/app.rs
 +++ b/codex-rs/tui/src/app.rs
 @@ -746,6 +746,36 @@ fn migration_prompt_hidden(config: &Config, migration_config_key: &str) -> bool
      }
  }
  
-+fn persist_codex_hud_show_details(show_details: bool) -> std::result::Result<(), String> {
++fn persist_powerbar_show_details(show_details: bool) -> std::result::Result<(), String> {
 +    let home = dirs::home_dir().ok_or_else(|| "home directory is not available".to_string())?;
-+    let config_dir = home.join(".codex-hud");
++    let config_dir = home.join(".powerbar");
 +    let config_path = config_dir.join("config.json");
 +
 +    std::fs::create_dir_all(&config_dir)
@@ -152,7 +152,7 @@ index 945bf0f..9e41463 100644
  fn target_preset_for_upgrade<'a>(
      available_models: &'a [ModelPreset],
      target_model: &str,
-@@ -5074,9 +5104,28 @@ impl App {
+@@ -5062,9 +5092,28 @@ impl App {
                  self.chat_widget.set_status_line_branch(cwd, branch);
                  self.refresh_status_line();
              }
@@ -163,29 +163,29 @@ index 945bf0f..9e41463 100644
              AppEvent::StatusLineSetupCancelled => {
                  self.chat_widget.cancel_status_line_setup();
              }
-+            AppEvent::CodexHudSetup { show_details } => {
-+                match persist_codex_hud_show_details(show_details) {
++            AppEvent::PowerbarSetup { show_details } => {
++                match persist_powerbar_show_details(show_details) {
 +                    Ok(()) => {
 +                        self.chat_widget.refresh_status_line();
 +                    }
 +                    Err(err) => {
-+                        tracing::error!(error = %err, "failed to persist Codex HUD settings");
++                        tracing::error!(error = %err, "failed to persist Powerbar settings");
 +                        self.chat_widget
-+                            .add_error_message(format!("Failed to save Codex HUD settings: {err}"));
++                            .add_error_message(format!("Failed to save Powerbar settings: {err}"));
 +                    }
 +                }
 +            }
-+            AppEvent::CodexHudSetupCancelled => {
-+                self.chat_widget.cancel_codex_hud_setup();
++            AppEvent::PowerbarSetupCancelled => {
++                self.chat_widget.cancel_powerbar_setup();
 +            }
              AppEvent::TerminalTitleSetup { items } => {
                  let ids = items.iter().map(ToString::to_string).collect::<Vec<_>>();
                  let edit = codex_core::config::edit::terminal_title_items_edit(&ids);
 diff --git a/codex-rs/tui/src/app_event.rs b/codex-rs/tui/src/app_event.rs
-index e652cb2..472c0f1 100644
+index 2ae1750..0fca24f 100644
 --- a/codex-rs/tui/src/app_event.rs
 +++ b/codex-rs/tui/src/app_event.rs
-@@ -542,6 +542,11 @@ pub(crate) enum AppEvent {
+@@ -526,6 +526,11 @@ pub(crate) enum AppEvent {
          cwd: PathBuf,
          branch: Option<String>,
      },
@@ -197,33 +197,33 @@ index e652cb2..472c0f1 100644
      /// Apply a user-confirmed status-line item ordering/selection.
      StatusLineSetup {
          items: Vec<StatusLineItem>,
-@@ -549,6 +554,13 @@ pub(crate) enum AppEvent {
+@@ -533,6 +538,13 @@ pub(crate) enum AppEvent {
      /// Dismiss the status-line setup UI without changing config.
      StatusLineSetupCancelled,
  
-+    /// Apply a user-confirmed Codex HUD configuration update.
-+    CodexHudSetup {
++    /// Apply a user-confirmed Powerbar configuration update.
++    PowerbarSetup {
 +        show_details: bool,
 +    },
-+    /// Dismiss the Codex HUD setup UI without changing config.
-+    CodexHudSetupCancelled,
++    /// Dismiss the Powerbar setup UI without changing config.
++    PowerbarSetupCancelled,
 +
      /// Apply a user-confirmed terminal-title item ordering/selection.
      TerminalTitleSetup {
          items: Vec<TerminalTitleItem>,
 diff --git a/codex-rs/tui/src/bottom_pane/chat_composer.rs b/codex-rs/tui/src/bottom_pane/chat_composer.rs
-index 7a8fa25..75d422a 100644
+index 22da977..bb041a8 100644
 --- a/codex-rs/tui/src/bottom_pane/chat_composer.rs
 +++ b/codex-rs/tui/src/bottom_pane/chat_composer.rs
-@@ -125,6 +125,7 @@
- //! - If repeated space events are seen before timeout, we proceed with hold-to-talk.
- //! - While recording, repeated space events keep the recording alive; if they stop for a short
- //!   window, we stop and transcribe.
-+use codex_ansi_escape::ansi_escape_line;
+@@ -117,6 +117,7 @@
  use crate::bottom_pane::footer::mode_indicator_line;
  use crate::key_hint;
  use crate::key_hint::KeyBinding;
-@@ -171,6 +172,7 @@ use super::footer::render_context_right;
++use codex_ansi_escape::ansi_escape_line;
+ use crate::key_hint::has_ctrl_or_alt;
+ use crate::line_truncation::truncate_line_with_ellipsis_if_overflow;
+ use crate::ui_consts::FOOTER_INDENT_COLS;
+@@ -160,6 +161,7 @@ use super::footer::render_context_right;
  use super::footer::render_footer_from_props;
  use super::footer::render_footer_hint_items;
  use super::footer::render_footer_line;
@@ -231,7 +231,7 @@ index 7a8fa25..75d422a 100644
  use super::footer::reset_mode_after_activity;
  use super::footer::single_line_footer_layout;
  use super::footer::toggle_shortcut_mode;
-@@ -410,6 +412,10 @@ pub(crate) struct ChatComposer {
+@@ -334,6 +336,10 @@ pub(crate) struct ChatComposer {
      audio_device_selection_enabled: bool,
      windows_degraded_sandbox_active: bool,
      status_line_value: Option<Line<'static>>,
@@ -242,7 +242,7 @@ index 7a8fa25..75d422a 100644
      status_line_enabled: bool,
      // Agent label injected into the footer's contextual row when multi-agent mode is active.
      active_agent_label: Option<String>,
-@@ -534,6 +540,8 @@ impl ChatComposer {
+@@ -455,6 +461,8 @@ impl ChatComposer {
              audio_device_selection_enabled: false,
              windows_degraded_sandbox_active: false,
              status_line_value: None,
@@ -251,7 +251,7 @@ index 7a8fa25..75d422a 100644
              status_line_enabled: false,
              active_agent_label: None,
          };
-@@ -3219,6 +3227,7 @@ impl ChatComposer {
+@@ -2804,6 +2812,7 @@ impl ChatComposer {
              context_window_percent: self.context_window_percent,
              context_window_used_tokens: self.context_window_used_tokens,
              status_line_value: self.status_line_value.clone(),
@@ -259,7 +259,7 @@ index 7a8fa25..75d422a 100644
              status_line_enabled: self.status_line_enabled,
              active_agent_label: self.active_agent_label.clone(),
          }
-@@ -3257,6 +3266,24 @@ impl ChatComposer {
+@@ -2842,6 +2851,24 @@ impl ChatComposer {
          if self.footer_flash_visible() {
              return Some(1);
          }
@@ -284,7 +284,7 @@ index 7a8fa25..75d422a 100644
          self.footer_hint_override
              .as_ref()
              .map(|items| if items.is_empty() { 0 } else { 1 })
-@@ -3787,6 +3814,14 @@ impl ChatComposer {
+@@ -3312,6 +3339,14 @@ impl ChatComposer {
          true
      }
  
@@ -299,7 +299,7 @@ index 7a8fa25..75d422a 100644
      pub(crate) fn set_status_line_enabled(&mut self, enabled: bool) -> bool {
          if self.status_line_enabled == enabled {
              return false;
-@@ -4240,19 +4275,44 @@ impl ChatComposer {
+@@ -3501,19 +3536,44 @@ impl ChatComposer {
                  };
                  let available_width =
                      hint_rect.width.saturating_sub(FOOTER_INDENT_COLS as u16) as usize;
@@ -349,7 +349,7 @@ index 7a8fa25..75d422a 100644
                  let left_mode_indicator = if status_line_active {
                      None
                  } else {
-@@ -4266,8 +4326,9 @@ impl ChatComposer {
+@@ -3527,8 +3587,9 @@ impl ChatComposer {
                  } else if let Some(items) = self.footer_hint_override.as_ref() {
                      footer_hint_items_width(items)
                  } else if status_line_active {
@@ -360,7 +360,7 @@ index 7a8fa25..75d422a 100644
                          .map(|line| line.width() as u16)
                          .unwrap_or(0)
                  } else {
-@@ -4280,17 +4341,21 @@ impl ChatComposer {
+@@ -3541,17 +3602,21 @@ impl ChatComposer {
                      )
                  };
                  let right_line = if status_line_active {
@@ -392,7 +392,7 @@ index 7a8fa25..75d422a 100644
                      }
                  } else {
                      Some(context_window_line(
-@@ -4302,12 +4367,17 @@ impl ChatComposer {
+@@ -3563,12 +3628,17 @@ impl ChatComposer {
                  if status_line_active
                      && let Some(max_left) = max_left_width_for_right(hint_rect, right_width)
                      && left_width > max_left
@@ -415,7 +415,7 @@ index 7a8fa25..75d422a 100644
                  }
                  let can_show_left_and_context =
                      can_show_left_with_context(hint_rect, left_width, right_width);
-@@ -4354,8 +4424,12 @@ impl ChatComposer {
+@@ -3615,8 +3685,12 @@ impl ChatComposer {
                      match summary_left {
                          SummaryLeft::Default => {
                              if status_line_active {
@@ -430,7 +430,7 @@ index 7a8fa25..75d422a 100644
                                  } else {
                                      render_footer_from_props(
                                          hint_rect,
-@@ -4391,8 +4465,12 @@ impl ChatComposer {
+@@ -3652,8 +3726,12 @@ impl ChatComposer {
                  } else if let Some(items) = self.footer_hint_override.as_ref() {
                      render_footer_hint_items(hint_rect, buf, items);
                  } else if status_line_active {
@@ -445,13 +445,13 @@ index 7a8fa25..75d422a 100644
                      }
                  } else {
                      render_footer_from_props(
-diff --git a/codex-rs/tui/src/bottom_pane/codex_hud_setup.rs b/codex-rs/tui/src/bottom_pane/codex_hud_setup.rs
+diff --git a/codex-rs/tui/src/bottom_pane/powerbar_setup.rs b/codex-rs/tui/src/bottom_pane/powerbar_setup.rs
 new file mode 100644
 index 0000000..3ba5817
 --- /dev/null
-+++ b/codex-rs/tui/src/bottom_pane/codex_hud_setup.rs
++++ b/codex-rs/tui/src/bottom_pane/powerbar_setup.rs
 @@ -0,0 +1,91 @@
-+//! Codex HUD configuration view for customizing HUD-specific display options.
++//! Powerbar configuration view for customizing HUD-specific display options.
 +
 +use ratatui::buffer::Buffer;
 +use ratatui::layout::Rect;
@@ -479,11 +479,11 @@ index 0000000..3ba5817
 +    Some(Line::from(preview))
 +}
 +
-+pub(crate) struct CodexHudSetupView {
++pub(crate) struct PowerbarSetupView {
 +    picker: MultiSelectPicker,
 +}
 +
-+impl CodexHudSetupView {
++impl PowerbarSetupView {
 +    pub(crate) fn new(show_details: bool, app_event_tx: AppEventSender) -> Self {
 +        let items = vec![MultiSelectItem {
 +            id: SHOW_DETAILS_ID.to_string(),
@@ -497,7 +497,7 @@ index 0000000..3ba5817
 +
 +        Self {
 +            picker: MultiSelectPicker::builder(
-+                "Configure Codex HUD".to_string(),
++                "Configure Powerbar".to_string(),
 +                Some("Select which HUD-specific details to display.".to_string()),
 +                app_event_tx,
 +            )
@@ -508,17 +508,17 @@ index 0000000..3ba5817
 +            .on_preview(preview_line)
 +            .on_confirm(|ids, app_event| {
 +                let show_details = ids.iter().any(|id| id == SHOW_DETAILS_ID);
-+                app_event.send(AppEvent::CodexHudSetup { show_details });
++                app_event.send(AppEvent::PowerbarSetup { show_details });
 +            })
 +            .on_cancel(|app_event| {
-+                app_event.send(AppEvent::CodexHudSetupCancelled);
++                app_event.send(AppEvent::PowerbarSetupCancelled);
 +            })
 +            .build(),
 +        }
 +    }
 +}
 +
-+impl BottomPaneView for CodexHudSetupView {
++impl BottomPaneView for PowerbarSetupView {
 +    fn handle_key_event(&mut self, key_event: crossterm::event::KeyEvent) {
 +        self.picker.handle_key_event(key_event);
 +    }
@@ -533,7 +533,7 @@ index 0000000..3ba5817
 +    }
 +}
 +
-+impl Renderable for CodexHudSetupView {
++impl Renderable for PowerbarSetupView {
 +    fn render(&self, area: Rect, buf: &mut Buffer) {
 +        self.picker.render(area, buf)
 +    }
@@ -543,7 +543,7 @@ index 0000000..3ba5817
 +    }
 +}
 diff --git a/codex-rs/tui/src/bottom_pane/footer.rs b/codex-rs/tui/src/bottom_pane/footer.rs
-index c8148c9..2132028 100644
+index 194f662..d0604fb 100644
 --- a/codex-rs/tui/src/bottom_pane/footer.rs
 +++ b/codex-rs/tui/src/bottom_pane/footer.rs
 @@ -77,6 +77,8 @@ pub(crate) struct FooterProps {
@@ -663,7 +663,7 @@ index c8148c9..2132028 100644
  }
  
  pub(crate) fn footer_line_width(
-@@ -1114,8 +1163,7 @@ mod tests {
+@@ -1116,8 +1165,7 @@ mod tests {
                      ) {
                      passive_status_line
                          .as_ref()
@@ -673,7 +673,7 @@ index c8148c9..2132028 100644
                  } else {
                      None
                  };
-@@ -1271,6 +1319,7 @@ mod tests {
+@@ -1276,6 +1324,7 @@ mod tests {
                  context_window_percent: None,
                  context_window_used_tokens: None,
                  status_line_value: None,
@@ -681,7 +681,7 @@ index c8148c9..2132028 100644
                  status_line_enabled: false,
                  active_agent_label: None,
              },
-@@ -1289,6 +1338,7 @@ mod tests {
+@@ -1294,6 +1343,7 @@ mod tests {
                  context_window_percent: None,
                  context_window_used_tokens: None,
                  status_line_value: None,
@@ -689,7 +689,7 @@ index c8148c9..2132028 100644
                  status_line_enabled: false,
                  active_agent_label: None,
              },
-@@ -1307,6 +1357,7 @@ mod tests {
+@@ -1312,6 +1362,7 @@ mod tests {
                  context_window_percent: None,
                  context_window_used_tokens: None,
                  status_line_value: None,
@@ -697,7 +697,7 @@ index c8148c9..2132028 100644
                  status_line_enabled: false,
                  active_agent_label: None,
              },
-@@ -1325,6 +1376,7 @@ mod tests {
+@@ -1330,6 +1381,7 @@ mod tests {
                  context_window_percent: None,
                  context_window_used_tokens: None,
                  status_line_value: None,
@@ -705,7 +705,7 @@ index c8148c9..2132028 100644
                  status_line_enabled: false,
                  active_agent_label: None,
              },
-@@ -1343,6 +1395,7 @@ mod tests {
+@@ -1348,6 +1400,7 @@ mod tests {
                  context_window_percent: None,
                  context_window_used_tokens: None,
                  status_line_value: None,
@@ -713,7 +713,7 @@ index c8148c9..2132028 100644
                  status_line_enabled: false,
                  active_agent_label: None,
              },
-@@ -1361,6 +1414,7 @@ mod tests {
+@@ -1366,6 +1419,7 @@ mod tests {
                  context_window_percent: None,
                  context_window_used_tokens: None,
                  status_line_value: None,
@@ -721,7 +721,7 @@ index c8148c9..2132028 100644
                  status_line_enabled: false,
                  active_agent_label: None,
              },
-@@ -1379,6 +1433,7 @@ mod tests {
+@@ -1384,6 +1438,7 @@ mod tests {
                  context_window_percent: None,
                  context_window_used_tokens: None,
                  status_line_value: None,
@@ -729,7 +729,7 @@ index c8148c9..2132028 100644
                  status_line_enabled: false,
                  active_agent_label: None,
              },
-@@ -1397,6 +1452,7 @@ mod tests {
+@@ -1402,6 +1457,7 @@ mod tests {
                  context_window_percent: Some(72),
                  context_window_used_tokens: None,
                  status_line_value: None,
@@ -737,7 +737,7 @@ index c8148c9..2132028 100644
                  status_line_enabled: false,
                  active_agent_label: None,
              },
-@@ -1415,6 +1471,7 @@ mod tests {
+@@ -1420,6 +1476,7 @@ mod tests {
                  context_window_percent: None,
                  context_window_used_tokens: Some(123_456),
                  status_line_value: None,
@@ -745,7 +745,7 @@ index c8148c9..2132028 100644
                  status_line_enabled: false,
                  active_agent_label: None,
              },
-@@ -1433,6 +1490,7 @@ mod tests {
+@@ -1438,6 +1495,7 @@ mod tests {
                  context_window_percent: None,
                  context_window_used_tokens: None,
                  status_line_value: None,
@@ -753,7 +753,7 @@ index c8148c9..2132028 100644
                  status_line_enabled: false,
                  active_agent_label: None,
              },
-@@ -1449,6 +1507,7 @@ mod tests {
+@@ -1454,6 +1512,7 @@ mod tests {
              context_window_percent: None,
              context_window_used_tokens: None,
              status_line_value: None,
@@ -761,7 +761,7 @@ index c8148c9..2132028 100644
              status_line_enabled: false,
              active_agent_label: None,
          };
-@@ -1478,6 +1537,7 @@ mod tests {
+@@ -1483,6 +1542,7 @@ mod tests {
              context_window_percent: None,
              context_window_used_tokens: None,
              status_line_value: None,
@@ -769,7 +769,7 @@ index c8148c9..2132028 100644
              status_line_enabled: false,
              active_agent_label: None,
          };
-@@ -1500,6 +1560,7 @@ mod tests {
+@@ -1505,6 +1565,7 @@ mod tests {
              context_window_percent: None,
              context_window_used_tokens: None,
              status_line_value: Some(Line::from("Status line content".to_string())),
@@ -777,7 +777,7 @@ index c8148c9..2132028 100644
              status_line_enabled: true,
              active_agent_label: None,
          };
-@@ -1517,6 +1578,7 @@ mod tests {
+@@ -1522,6 +1583,7 @@ mod tests {
              context_window_percent: None,
              context_window_used_tokens: None,
              status_line_value: Some(Line::from("Status line content".to_string())),
@@ -785,7 +785,7 @@ index c8148c9..2132028 100644
              status_line_enabled: true,
              active_agent_label: None,
          };
-@@ -1534,6 +1596,7 @@ mod tests {
+@@ -1539,6 +1601,7 @@ mod tests {
              context_window_percent: None,
              context_window_used_tokens: None,
              status_line_value: Some(Line::from("Status line content".to_string())),
@@ -793,7 +793,7 @@ index c8148c9..2132028 100644
              status_line_enabled: true,
              active_agent_label: None,
          };
-@@ -1551,6 +1614,7 @@ mod tests {
+@@ -1556,6 +1619,7 @@ mod tests {
              context_window_percent: Some(50),
              context_window_used_tokens: None,
              status_line_value: None, // command timed out / empty
@@ -801,7 +801,7 @@ index c8148c9..2132028 100644
              status_line_enabled: true,
              active_agent_label: None,
          };
-@@ -1573,6 +1637,7 @@ mod tests {
+@@ -1578,6 +1642,7 @@ mod tests {
              context_window_percent: Some(50),
              context_window_used_tokens: None,
              status_line_value: None,
@@ -809,7 +809,7 @@ index c8148c9..2132028 100644
              status_line_enabled: false,
              active_agent_label: None,
          };
-@@ -1595,6 +1660,7 @@ mod tests {
+@@ -1600,6 +1665,7 @@ mod tests {
              context_window_percent: Some(50),
              context_window_used_tokens: None,
              status_line_value: None,
@@ -817,7 +817,7 @@ index c8148c9..2132028 100644
              status_line_enabled: true,
              active_agent_label: None,
          };
-@@ -1620,6 +1686,7 @@ mod tests {
+@@ -1625,6 +1691,7 @@ mod tests {
              status_line_value: Some(Line::from(
                  "Status line content that should truncate before the mode indicator".to_string(),
              )),
@@ -825,7 +825,7 @@ index c8148c9..2132028 100644
              status_line_enabled: true,
              active_agent_label: None,
          };
-@@ -1642,6 +1709,7 @@ mod tests {
+@@ -1647,6 +1714,7 @@ mod tests {
              context_window_percent: None,
              context_window_used_tokens: None,
              status_line_value: None,
@@ -833,7 +833,7 @@ index c8148c9..2132028 100644
              status_line_enabled: false,
              active_agent_label: Some("Robie [explorer]".to_string()),
          };
-@@ -1659,6 +1727,7 @@ mod tests {
+@@ -1664,6 +1732,7 @@ mod tests {
              context_window_percent: None,
              context_window_used_tokens: None,
              status_line_value: Some(Line::from("Status line content".to_string())),
@@ -841,7 +841,7 @@ index c8148c9..2132028 100644
              status_line_enabled: true,
              active_agent_label: Some("Robie [explorer]".to_string()),
          };
-@@ -1682,6 +1751,7 @@ mod tests {
+@@ -1687,6 +1756,7 @@ mod tests {
                  "Status line content that is definitely too long to fit alongside the mode label"
                      .to_string(),
              )),
@@ -850,14 +850,14 @@ index c8148c9..2132028 100644
              active_agent_label: None,
          };
 diff --git a/codex-rs/tui/src/bottom_pane/mod.rs b/codex-rs/tui/src/bottom_pane/mod.rs
-index d74f05b..ecc0ea5 100644
+index 4016821..bddd2de 100644
 --- a/codex-rs/tui/src/bottom_pane/mod.rs
 +++ b/codex-rs/tui/src/bottom_pane/mod.rs
 @@ -43,6 +43,7 @@ use std::time::Duration;
  
  mod app_link_view;
  mod approval_overlay;
-+mod codex_hud_setup;
++mod powerbar_setup;
  mod mcp_server_elicitation;
  mod multi_select_picker;
  mod request_user_input;
@@ -865,11 +865,11 @@ index d74f05b..ecc0ea5 100644
  pub(crate) use approval_overlay::ApprovalOverlay;
  pub(crate) use approval_overlay::ApprovalRequest;
  pub(crate) use approval_overlay::format_requested_permissions_rule;
-+pub(crate) use codex_hud_setup::CodexHudSetupView;
++pub(crate) use powerbar_setup::PowerbarSetupView;
  pub(crate) use mcp_server_elicitation::McpServerElicitationFormRequest;
  pub(crate) use mcp_server_elicitation::McpServerElicitationOverlay;
  pub(crate) use request_user_input::RequestUserInputOverlay;
-@@ -1177,12 +1179,17 @@ impl BottomPane {
+@@ -1157,12 +1159,17 @@ impl BottomPane {
          }
      }
  
@@ -889,14 +889,14 @@ index d74f05b..ecc0ea5 100644
          if self.composer.set_status_line_enabled(enabled) {
              self.request_redraw();
 diff --git a/codex-rs/tui/src/chatwidget.rs b/codex-rs/tui/src/chatwidget.rs
-index a343a41..604af12 100644
+index ba05bdb..c545410 100644
 --- a/codex-rs/tui/src/chatwidget.rs
 +++ b/codex-rs/tui/src/chatwidget.rs
 @@ -48,6 +48,7 @@ use crate::audio_device::list_realtime_audio_device_names;
  use crate::bottom_pane::StatusLineItem;
  use crate::bottom_pane::StatusLinePreviewData;
  use crate::bottom_pane::StatusLineSetupView;
-+use crate::bottom_pane::CodexHudSetupView;
++use crate::bottom_pane::PowerbarSetupView;
  use crate::bottom_pane::TerminalTitleItem;
  use crate::bottom_pane::TerminalTitleSetupView;
  use crate::mention_codec::LinkedMention;
@@ -1005,8 +1005,8 @@ index a343a41..604af12 100644
          tracing::info!("Status line setup canceled by user");
      }
  
-+    pub(crate) fn cancel_codex_hud_setup(&self) {
-+        tracing::info!("Codex HUD setup canceled by user");
++    pub(crate) fn cancel_powerbar_setup(&self) {
++        tracing::info!("Powerbar setup canceled by user");
 +    }
 +
      /// Applies status-line item selection from the setup view to in-memory config.
@@ -1042,7 +1042,7 @@ index a343a41..604af12 100644
              external_editor_state: ExternalEditorState::Closed,
              realtime_conversation: RealtimeConversationUiState::default(),
              last_rendered_user_message_event: None,
-@@ -4628,7 +4718,14 @@ impl ChatWidget {
+@@ -4625,7 +4715,14 @@ impl ChatWidget {
              .set_audio_device_selection_enabled(widget.realtime_audio_device_selection_enabled());
          widget
              .bottom_pane
@@ -1058,37 +1058,37 @@ index a343a41..604af12 100644
          widget
              .bottom_pane
              .set_collaboration_modes_enabled(/*enabled*/ true);
-@@ -5166,6 +5263,9 @@ impl ChatWidget {
+@@ -5163,6 +5260,9 @@ impl ChatWidget {
              SlashCommand::Statusline => {
                  self.open_status_line_setup();
              }
-+            SlashCommand::CodexHud => {
-+                self.open_codex_hud_setup();
++            SlashCommand::Powerbar => {
++                self.open_powerbar_setup();
 +            }
              SlashCommand::Theme => {
                  self.open_theme_picker();
              }
-@@ -7222,6 +7322,11 @@ impl ChatWidget {
+@@ -7216,6 +7316,11 @@ impl ChatWidget {
          self.bottom_pane.show_view(Box::new(view));
      }
  
-+    fn open_codex_hud_setup(&mut self) {
-+        let view = CodexHudSetupView::new(read_codex_hud_show_details(), self.app_event_tx.clone());
++    fn open_powerbar_setup(&mut self) {
++        let view = PowerbarSetupView::new(read_powerbar_show_details(), self.app_event_tx.clone());
 +        self.bottom_pane.show_view(Box::new(view));
 +    }
 +
      fn open_terminal_title_setup(&mut self) {
          let configured_terminal_title_items = self.configured_terminal_title_items();
          self.terminal_title_setup_original_items = Some(self.config.tui_terminal_title.clone());
-@@ -10906,5 +11011,22 @@ pub(crate) fn show_review_commit_picker_with_entries(
+@@ -10915,5 +11020,22 @@ pub(crate) fn show_review_commit_picker_with_entries(
      });
  }
  
-+fn read_codex_hud_show_details() -> bool {
++fn read_powerbar_show_details() -> bool {
 +    let Some(home) = dirs::home_dir() else {
 +        return true;
 +    };
-+    let path = home.join(".codex-hud").join("config.json");
++    let path = home.join(".powerbar").join("config.json");
 +    let Ok(raw) = std::fs::read_to_string(path) else {
 +        return true;
 +    };
@@ -1190,7 +1190,7 @@ index d80003c..a49bc24 100644
 +    fn status_line_command_env_vars(&mut self) -> Vec<(String, String)> {
 +        let mut vars = Vec::new();
 +        if let Some(width) = self.bottom_pane.status_line_available_width() {
-+            vars.push(("CODEX_HUD_WIDTH".into(), width.to_string()));
++            vars.push(("POWERBAR_WIDTH".into(), width.to_string()));
 +        }
 +        if let Some(pct) = self.status_line_context_used_percent() {
 +            vars.push(("CODEX_CONTEXT_USED_PCT".into(), pct.to_string()));
@@ -1333,7 +1333,7 @@ index ec624d3..27044d1 100644
      DebugConfig,
      Title,
      Statusline,
-+    CodexHud,
++    Powerbar,
      Theme,
      Mcp,
      Apps,
@@ -1341,7 +1341,7 @@ index ec624d3..27044d1 100644
              SlashCommand::DebugConfig => "show config layers and requirement sources for debugging",
              SlashCommand::Title => "configure which items appear in the terminal title",
              SlashCommand::Statusline => "configure which items appear in the status line",
-+            SlashCommand::CodexHud => "configure Codex HUD settings",
++            SlashCommand::Powerbar => "configure Powerbar settings",
              SlashCommand::Theme => "choose a syntax highlighting theme",
              SlashCommand::Ps => "list background terminals",
              SlashCommand::Stop => "stop all background terminals",
@@ -1349,7 +1349,7 @@ index ec624d3..27044d1 100644
              SlashCommand::Settings => true,
              SlashCommand::Collab => true,
              SlashCommand::Agent | SlashCommand::MultiAgents => true,
-+            SlashCommand::CodexHud => false,
++            SlashCommand::Powerbar => false,
              SlashCommand::Statusline => false,
              SlashCommand::Theme => false,
              SlashCommand::Title => false,

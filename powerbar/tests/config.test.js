@@ -6,8 +6,8 @@ import path from 'node:path';
 import { loadConfig } from '../dist/config.js';
 
 test('loadConfig applies preset defaults and explicit overrides', () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-hud-config-'));
-  const configDir = path.join(home, '.codex-hud');
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'powerbar-config-'));
+  const configDir = path.join(home, '.powerbar');
   fs.mkdirSync(configDir, { recursive: true });
   fs.writeFileSync(
     path.join(configDir, 'config.json'),

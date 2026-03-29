@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import { getGitInfo } from './git.js';
 import { collectEnvironment } from './environment.js';
-import type { CodexStatusLineItem, HudSnapshot, PlanItem, ToolActivity } from './types.js';
+import type { CodexStatusLineItem, HudSnapshot, PlanItem, RateWindow, ToolActivity } from './types.js';
 
 interface RolloutLine {
   timestamp?: string;
@@ -568,7 +568,7 @@ export async function buildSnapshotFromEnv(): Promise<HudSnapshot> {
     recentTools: [],
     plan: [],
     compactCount: 0,
-    cwd: process.env.CODEX_HUD_CWD ?? process.cwd(),
+    cwd: process.env.POWERBAR_CWD ?? process.cwd(),
   };
   applyCodexEnvOverrides(snapshot);
 
@@ -590,6 +590,25 @@ function hasEnvVar(name: string): boolean {
   return process.env[name] !== undefined;
 }
 
+function mergeRateWindowPreferEnv(
+  prefix: 'CODEX_RATE_PRIMARY' | 'CODEX_RATE_SECONDARY',
+  envWindow?: RateWindow,
+  rolloutWindow?: RateWindow,
+): RateWindow | undefined {
+  if (!envWindow) return rolloutWindow;
+  if (!rolloutWindow) return envWindow;
+
+  return {
+    usedPercent: hasEnvVar(`${prefix}_PCT`) ? envWindow.usedPercent : rolloutWindow.usedPercent,
+    resetsAt: hasEnvVar(`${prefix}_RESETS`)
+      ? (envWindow.resetsAt ?? rolloutWindow.resetsAt)
+      : (rolloutWindow.resetsAt ?? envWindow.resetsAt),
+    windowMinutes: hasEnvVar(`${prefix}_WINDOW_MIN`)
+      ? (envWindow.windowMinutes ?? rolloutWindow.windowMinutes)
+      : (rolloutWindow.windowMinutes ?? envWindow.windowMinutes),
+  };
+}
+
 /**
  * Merge two snapshots with env-backed values taking precedence only when the
  * corresponding env vars are actually present. This prevents empty env-mode
@@ -608,6 +627,8 @@ export function mergeSnapshotsPreferEnv(envSnapshot: HudSnapshot, rolloutSnapsho
     plan: hasEnvVar('CODEX_PLAN_TOTAL') ? envSnapshot.plan : rolloutSnapshot.plan,
     turnState: hasEnvVar('CODEX_TURN_STATE') ? envSnapshot.turnState : rolloutSnapshot.turnState,
     environment: envSnapshot.environment ?? rolloutSnapshot.environment,
+    ratePrimary: mergeRateWindowPreferEnv('CODEX_RATE_PRIMARY', envSnapshot.ratePrimary, rolloutSnapshot.ratePrimary),
+    rateSecondary: mergeRateWindowPreferEnv('CODEX_RATE_SECONDARY', envSnapshot.rateSecondary, rolloutSnapshot.rateSecondary),
   };
 
   if (!hasEnvVar('CODEX_CONTEXT_USED_PCT') && rolloutSnapshot.contextUsedPercent !== undefined) {
@@ -627,12 +648,6 @@ export function mergeSnapshotsPreferEnv(envSnapshot: HudSnapshot, rolloutSnapsho
   }
   if (!hasEnvVar('CODEX_FAST') && rolloutSnapshot.fastMode !== undefined) {
     merged.fastMode = rolloutSnapshot.fastMode;
-  }
-  if (!hasEnvVar('CODEX_RATE_PRIMARY_PCT') && rolloutSnapshot.ratePrimary) {
-    merged.ratePrimary = rolloutSnapshot.ratePrimary;
-  }
-  if (!hasEnvVar('CODEX_RATE_SECONDARY_PCT') && rolloutSnapshot.rateSecondary) {
-    merged.rateSecondary = rolloutSnapshot.rateSecondary;
   }
   if (!hasEnvVar('CODEX_SESSION_ID') && rolloutSnapshot.sessionId) {
     merged.sessionId = rolloutSnapshot.sessionId;

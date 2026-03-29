@@ -1,8 +1,8 @@
-# Codex HUD
+# Powerbar
 
-Codex HUD is an open-source status line HUD for Codex CLI that displays Claude-HUD style usage and status information in the terminal.
+Powerbar is an open-source status line HUD for Codex CLI that displays Claude-HUD style usage and status information in the terminal.
 
-![Codex HUD screenshot](docs/assets/hud-example.png)
+![Powerbar screenshot](docs/assets/hud-example.png)
 
 ## What It Does
 - Parses Codex rollout logs (`~/.codex/sessions/**/rollout-*.jsonl`)
@@ -13,13 +13,13 @@ Codex HUD is an open-source status line HUD for Codex CLI that displays Claude-H
 ## Quick Start
 ```bash
 git clone https://github.com/Qifei-C/codex-powerbar.git
-cd codex-powerbar/Codex-HUD
+cd codex-powerbar/powerbar
 ./install.sh
 ```
 
 Guided install:
 ```bash
-cd codex-powerbar/Codex-HUD
+cd codex-powerbar/powerbar
 ./install.sh --interactive
 ```
 
@@ -49,7 +49,7 @@ Changes do not appear in already-running Codex sessions.
 Verification commands:
 ```bash
 grep -n "status_line_command" ~/.codex/config.toml
-node ~/codex-powerbar/Codex-HUD/dist/index.js --status-line --once --no-clear --cwd "$PWD"
+powerbar --status-line --once --no-clear --cwd "$PWD"
 ```
 
 ## Commands
@@ -69,7 +69,7 @@ Minimum pre-release checklist:
 Quick install for users:
 ```bash
 git clone https://github.com/Qifei-C/codex-powerbar.git
-cd codex-powerbar/Codex-HUD
+cd codex-powerbar/powerbar
 ./install.sh
 ```
 
@@ -81,7 +81,7 @@ FORCE_COLOR=0 codex              # Force-disable HUD colors
 ```
 
 ## Configuration
-Optional config lives at `~/.codex-hud/config.json`.
+Optional config lives at `~/.powerbar/config.json`.
 
 Example:
 ```json

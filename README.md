@@ -1,8 +1,8 @@
-# Codex HUD
+# Powerbar
 
-Codex HUD is an open-source status line HUD for Codex CLI, rendering Claude-HUD style usage and session status directly in the terminal.
+Powerbar is an open-source status line HUD for Codex CLI, rendering Claude-HUD style usage and session status directly in the terminal.
 
-![Codex HUD screenshot](Codex-HUD/docs/assets/hud-example.png)
+![Powerbar screenshot](powerbar/docs/assets/hud-example.png)
 
 ## What This Project Does
 - Parse Codex rollout logs (`~/.codex/sessions/**/rollout-*.jsonl`)
@@ -11,23 +11,23 @@ Codex HUD is an open-source status line HUD for Codex CLI, rendering Claude-HUD 
 - Support color control via `NO_COLOR` and `FORCE_COLOR`
 
 ## Repository Layout
-The active project files are currently under `Codex-HUD/`.
-- Main guide: `Codex-HUD/README.md`
-- Source: `Codex-HUD/src/`
-- Tests: `Codex-HUD/tests/`
-- Installer: `Codex-HUD/install.sh`
-- Codex patch: `Codex-HUD/patches/codex-statusline-command.patch`
+The active project files are currently under `powerbar/`.
+- Main guide: `powerbar/README.md`
+- Source: `powerbar/src/`
+- Tests: `powerbar/tests/`
+- Installer: `powerbar/install.sh`
+- Codex patch: `powerbar/patches/codex-statusline-command.patch`
 
 ## Quick Start
 ```bash
 git clone https://github.com/Qifei-C/codex-powerbar.git
-cd codex-powerbar/Codex-HUD
+cd codex-powerbar/powerbar
 ./install.sh
 ```
 
 Guided install:
 ```bash
-cd codex-powerbar/Codex-HUD
+cd codex-powerbar/powerbar
 ./install.sh --interactive
 ```
 
@@ -45,7 +45,7 @@ cd codex-powerbar/Codex-HUD
 ```bash
 codex --version
 grep -n "status_line_command" ~/.codex/config.toml
-node ~/codex-powerbar/Codex-HUD/dist/index.js --status-line --once --no-clear --cwd "$PWD"
+powerbar --status-line --once --no-clear --cwd "$PWD"
 ```
 
 ## Support

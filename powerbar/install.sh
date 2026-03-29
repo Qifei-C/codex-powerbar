@@ -5,7 +5,7 @@ trap 'echo ""; echo "[install] Interrupted"; exit 130' INT TERM
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PATCH_FILE="$REPO_DIR/patches/codex-statusline-command.patch"
 INSTALL_BIN_DIR="$HOME/.local/bin"
-PATCH_STATE_DIR_NAME=".codex-hud"
+PATCH_STATE_DIR_NAME=".powerbar"
 PATCH_STATE_FILE_NAME="applied-statusline-command.patch"
 INTERACTIVE=1
 ACTION="full"
@@ -14,6 +14,7 @@ FAST_BUILD=0
 REFERENCE_CODEX_VERSION=""
 PREBUILT_RELEASE_REPO="Qifei-C/codex-powerbar"
 PREBUILT_RELEASE_TAG="codex-v0.117.0"
+SOURCE_BUILD_CODEX_REF="main"
 FORCE_SOURCE_BUILD=0
 
 print_step() {
@@ -256,8 +257,8 @@ ensure_local_bin_precedence() {
   mkdir -p "$INSTALL_BIN_DIR"
   export PATH="$INSTALL_BIN_DIR:$PATH"
 
-  local marker_start="# >>> codex-hud path >>>"
-  local marker_end="# <<< codex-hud path <<<"
+  local marker_start="# >>> powerbar path >>>"
+  local marker_end="# <<< powerbar path <<<"
   local line='export PATH="$HOME/.local/bin:$PATH"'
   local rc_files=("$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile" "$HOME/.bash_profile")
 
@@ -289,7 +290,7 @@ find_codex_repo() {
     "$HOME/openai-codex"
     "$HOME/codex"
     "$HOME/src/openai-codex"
-    "$HOME/.codex-hud/vendor/openai-codex"
+    "$HOME/.powerbar/vendor/openai-codex"
   )
 
   for c in "${candidates[@]}"; do
@@ -311,7 +312,7 @@ clone_codex_repo() {
 }
 
 default_vendor_codex_repo() {
-  echo "$HOME/.codex-hud/vendor/openai-codex"
+  echo "$HOME/.powerbar/vendor/openai-codex"
 }
 
 is_managed_vendor_repo() {
@@ -405,11 +406,28 @@ apply_patch_if_needed() {
 }
 
 build_hud() {
-  print_step "Building codex-hud"
+  print_step "Building powerbar"
   ensure_command npm "npm is required (install Node.js + npm first)"
   cd "$REPO_DIR"
   npm ci
   npm run build
+}
+
+install_powerbar_cli() {
+  ensure_command node "node is required to run powerbar"
+
+  local bin_dir="$HOME/.local/bin"
+  local target="$bin_dir/powerbar"
+  mkdir -p "$bin_dir"
+
+  cat > "$target" <<EOF
+#!/usr/bin/env bash
+exec node "$REPO_DIR/dist/index.js" "\$@"
+EOF
+  chmod +x "$target"
+
+  ensure_local_bin_precedence
+  print_step "Installed powerbar CLI to $target"
 }
 
 configure_codex() {
@@ -633,30 +651,30 @@ interactive_setup() {
       if confirm_prompt "Use this checkout?" "Y"; then
         CODEX_REPO_OVERRIDE="$detected"
       else
-        CODEX_REPO_OVERRIDE="$(prompt_with_default "Codex source path to use or clone into" "$HOME/.codex-hud/vendor/openai-codex")"
+        CODEX_REPO_OVERRIDE="$(prompt_with_default "Codex source path to use or clone into" "$HOME/.powerbar/vendor/openai-codex")"
       fi
     else
       echo "[install] No local Codex source checkout detected."
-      CODEX_REPO_OVERRIDE="$(prompt_with_default "Clone Codex source into" "$HOME/.codex-hud/vendor/openai-codex")"
+      CODEX_REPO_OVERRIDE="$(prompt_with_default "Clone Codex source into" "$HOME/.powerbar/vendor/openai-codex")"
     fi
   fi
 
   print_step "Summary"
   case "$ACTION" in
     full)
-      echo "[install] Will build codex-hud, configure ~/.codex/config.toml, patch Codex, and install patched codex"
+      echo "[install] Will build powerbar, configure ~/.codex/config.toml, patch Codex, and install patched codex"
       ;;
     hud-only)
-      echo "[install] Will build codex-hud only"
+      echo "[install] Will build powerbar only"
       ;;
     hud-config)
-      echo "[install] Will build codex-hud and update ~/.codex/config.toml"
+      echo "[install] Will build powerbar and update ~/.codex/config.toml"
       ;;
     codex-only)
       echo "[install] Will patch/build/install patched codex"
       ;;
     tmux)
-      echo "[install] Will build codex-hud and enable tmux status bar HUD (no Codex rebuild)"
+      echo "[install] Will build powerbar and enable tmux status bar HUD (no Codex rebuild)"
       ;;
   esac
   if [[ -n "$CODEX_REPO_OVERRIDE" ]]; then
@@ -707,6 +725,7 @@ parse_args() {
 install_tmux_hud() {
   ensure_command tmux "tmux is required for this mode (install tmux first)"
   build_hud
+  install_powerbar_cli
 
   local cmd="cd '$REPO_DIR' && node dist/index.js --tmux-line --once 2>/dev/null"
 
@@ -718,8 +737,8 @@ install_tmux_hud() {
 
   # Persist in tmux.conf so it survives restarts
   local tmux_conf="$HOME/.tmux.conf"
-  local marker_start="# >>> codex-hud tmux >>>"
-  local marker_end="# <<< codex-hud tmux <<<"
+  local marker_start="# >>> powerbar tmux >>>"
+  local marker_end="# <<< powerbar tmux <<<"
 
   if [[ -f "$tmux_conf" ]] && grep -Fq "$marker_start" "$tmux_conf"; then
     # Replace existing block
@@ -781,7 +800,7 @@ detect_existing_codex() {
 
   # Already our patched binary in ~/.local/bin
   if [[ "$existing_dir" == "$INSTALL_BIN_DIR" ]]; then
-    print_step "Detected existing Codex-HUD patched binary at $existing (will be replaced)"
+    print_step "Detected existing Powerbar patched binary at $existing (will be replaced)"
     REFERENCE_CODEX_VERSION="$(find_reference_codex_version)"
     return 0
   fi
@@ -795,13 +814,13 @@ detect_existing_codex() {
     INSTALL_BIN_DIR="$HOME/.local/bin"
     echo ""
     echo "  Homebrew-managed binary detected."
-    echo "  Codex-HUD will install a patched binary to $INSTALL_BIN_DIR/codex"
+    echo "  Powerbar will install a patched binary to $INSTALL_BIN_DIR/codex"
     echo "  which takes precedence via PATH ordering (original stays untouched)."
   else
     # Overwrite npm/cargo/unknown installs in place
     INSTALL_BIN_DIR="$existing_dir"
     echo ""
-    echo "  Codex-HUD will replace this binary with a patched version."
+    echo "  Powerbar will replace this binary with a patched version."
     echo "  A backup will be saved as codex.backup.<timestamp> in the same directory."
   fi
 
@@ -819,7 +838,7 @@ detect_existing_codex() {
 }
 
 uninstall() {
-  print_step "Uninstalling Codex-HUD"
+  print_step "Uninstalling Powerbar"
 
   # 1. Find where the current codex binary lives
   local current
@@ -865,8 +884,8 @@ uninstall() {
   fi
 
   # 3. Clean PATH entries from shell rc files
-  local marker_start="# >>> codex-hud path >>>"
-  local marker_end="# <<< codex-hud path <<<"
+  local marker_start="# >>> powerbar path >>>"
+  local marker_end="# <<< powerbar path <<<"
   local rc_files=("$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile" "$HOME/.bash_profile")
   for rc in "${rc_files[@]}"; do
     if [[ ! -f "$rc" ]]; then
@@ -879,6 +898,13 @@ uninstall() {
     fi
   done
 
+  # 3b. Remove powerbar CLI wrapper.
+  local powerbar_bin="$HOME/.local/bin/powerbar"
+  if [[ -f "$powerbar_bin" ]]; then
+    rm -f "$powerbar_bin"
+    echo "  Removed powerbar wrapper: $powerbar_bin"
+  fi
+
   # 4. Remove status_line_command from config.toml
   local config="$HOME/.codex/config.toml"
   if [[ -f "$config" ]] && grep -q "status_line_command" "$config"; then
@@ -889,8 +915,8 @@ uninstall() {
 
   # 5. Clean tmux config
   local tmux_conf="$HOME/.tmux.conf"
-  local tmux_marker_start="# >>> codex-hud tmux >>>"
-  local tmux_marker_end="# <<< codex-hud tmux <<<"
+  local tmux_marker_start="# >>> powerbar tmux >>>"
+  local tmux_marker_end="# <<< powerbar tmux <<<"
   if [[ -f "$tmux_conf" ]] && grep -Fq "$tmux_marker_start" "$tmux_conf"; then
     local tmp
     tmp="$(mktemp)"
@@ -944,7 +970,7 @@ maybe_star_repo() {
     return 0
   fi
   echo ""
-  if confirm_prompt "Enjoying Codex-HUD? Star the repo on GitHub to support the project?" "N"; then
+  if confirm_prompt "Enjoying Powerbar? Star the repo on GitHub to support the project?" "N"; then
     if gh api -X PUT "/user/starred/$repo" --silent >/dev/null 2>&1; then
       echo "Thanks for the star!"
     else
@@ -978,16 +1004,20 @@ main() {
 
   if [[ "$ACTION" == "hud-only" ]]; then
     build_hud
+    install_powerbar_cli
     print_step "Done"
     echo "HUD rebuilt at: $REPO_DIR/dist/index.js"
+    echo "Powerbar installed at: $HOME/.local/bin/powerbar"
     return 0
   fi
 
   if [[ "$ACTION" == "hud-config" ]]; then
     build_hud
+    install_powerbar_cli
     configure_codex
     print_step "Done"
     echo "HUD rebuilt at: $REPO_DIR/dist/index.js"
+    echo "Powerbar installed at: $HOME/.local/bin/powerbar"
     echo "HUD command wired in ~/.codex/config.toml via [tui].status_line_command"
     return 0
   fi
@@ -1000,6 +1030,7 @@ main() {
 
   if [[ "$ACTION" == "full" ]]; then
     build_hud
+    install_powerbar_cli
     configure_codex
   fi
 
@@ -1021,6 +1052,7 @@ main() {
   fi
   if [[ "$ACTION" == "full" ]]; then
     echo "Run Codex normally: codex"
+    echo "Run Powerbar directly: powerbar"
     echo "HUD command wired in ~/.codex/config.toml via [tui].status_line_command"
   else
     echo "Re-run ./install.sh or ./install.sh --interactive to build/configure the HUD if needed"

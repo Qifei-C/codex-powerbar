@@ -17,9 +17,9 @@
   - `event_msg.plan_update` / `plan_delta`
 
 ## Port Strategy Chosen
-- Build `codex-hud` as an external HUD harness that tails rollout JSONL in near real-time.
+- Build `powerbar` as an external HUD harness that tails rollout JSONL in near real-time.
 - Keep the Claude HUD mental model (session line + activity + plan), but drive data from Codex rollout events.
-- Ship as a standalone CLI (`codex-hud`) so users can run it in split panes, dedicated terminal tabs, or wrappers.
+- Ship as a standalone CLI (`powerbar`) so users can run it in split panes, dedicated terminal tabs, or wrappers.
 
 ## Scope of MVP
 - Automatic latest rollout discovery.

@@ -96,7 +96,7 @@ function isSparkLimit(raw: ParsedRateWindows): boolean {
 }
 
 function hudDir(): string {
-  return path.join(os.homedir(), '.codex-hud');
+  return path.join(os.homedir(), '.powerbar');
 }
 
 function sessionIndexPath(): string {
@@ -502,7 +502,7 @@ export function buildSnapshotFromEnv(): HudSnapshot {
     recentTools: [],
     plan: [],
     compactCount: 0,
-    cwd: process.env.CODEX_HUD_CWD ?? process.cwd(),
+    cwd: process.env.POWERBAR_CWD ?? process.cwd(),
   };
   applyCodexEnvOverrides(snapshot);
   return snapshot;

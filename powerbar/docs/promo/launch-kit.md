@@ -1,4 +1,4 @@
-# Codex HUD Launch Kit
+# Powerbar Launch Kit
 
 Use this file to publish quickly without rewriting copy each time.
 
@@ -10,14 +10,14 @@ Use this file to publish quickly without rewriting copy each time.
 5. X / LinkedIn / Discord communities
 
 ## One-Line Pitch
-Codex HUD adds a Claude-HUD style status line to Codex CLI with model, Git branch, and 5h/7d usage visibility.
+Powerbar adds a Claude-HUD style status line to Codex CLI with model, Git branch, and 5h/7d usage visibility.
 
 ## Show HN Post
 Title:
-`Show HN: Codex HUD — Claude-HUD style status line for Codex CLI`
+`Show HN: Powerbar — Claude-HUD style status line for Codex CLI`
 
 Body:
-I built Codex HUD to make Codex CLI sessions easier to monitor at a glance.
+I built Powerbar to make Codex CLI sessions easier to monitor at a glance.
 
 It parses Codex rollout logs and renders a status line with:
 - active model
@@ -28,7 +28,7 @@ It parses Codex rollout logs and renders a status line with:
 Install:
 ```bash
 git clone https://github.com/Qifei-C/codex-powerbar.git
-cd codex-powerbar/Codex-HUD
+cd codex-powerbar/powerbar
 ./install.sh
 ```
 
@@ -45,14 +45,14 @@ Short description:
 `Track model, branch, and 5h/7d usage in Codex CLI with a clean real-time HUD.`
 
 First comment:
-Codex HUD is a lightweight harness for Codex CLI that adds a practical status line for everyday sessions. It helps you track usage windows and context state without leaving the terminal.
+Powerbar is a lightweight harness for Codex CLI that adds a practical status line for everyday sessions. It helps you track usage windows and context state without leaving the terminal.
 
 ## Reddit Post Template
 Title:
 `I built an open-source HUD for Codex CLI (model/git/usage in status line)`
 
 Body:
-I open-sourced Codex HUD, a status line harness for Codex CLI inspired by Claude-HUD.
+I open-sourced Powerbar, a status line harness for Codex CLI inspired by Claude-HUD.
 
 Highlights:
 - model + repository context
@@ -66,14 +66,14 @@ https://github.com/Qifei-C/codex-powerbar
 Quick install:
 ```bash
 git clone https://github.com/Qifei-C/codex-powerbar.git
-cd codex-powerbar/Codex-HUD
+cd codex-powerbar/powerbar
 ./install.sh
 ```
 
 I would appreciate feedback on usability and portability across Linux setups.
 
 ## X (Twitter) Post
-I open-sourced Codex HUD: a Claude-HUD style status line for Codex CLI.
+I open-sourced Powerbar: a Claude-HUD style status line for Codex CLI.
 Model + Git + 5h/7d usage at a glance, directly in terminal sessions.
 
 Repo: https://github.com/Qifei-C/codex-powerbar

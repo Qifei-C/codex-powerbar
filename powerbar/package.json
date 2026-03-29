@@ -1,11 +1,11 @@
 {
-  "name": "codex-hud",
+  "name": "powerbar",
   "version": "0.1.0",
   "description": "Real-time HUD harness for Codex sessions using rollout JSONL",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "codex-hud": "dist/index.js"
+    "powerbar": "dist/index.js"
   },
   "scripts": {
     "build": "tsc",

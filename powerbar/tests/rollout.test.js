@@ -36,7 +36,7 @@ test('buildSnapshot parses context, rates, tools, and plan', async () => {
 });
 
 test('buildSnapshot prefers spark limits for spark models and default for non-spark', async () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-hud-rollout-'));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'powerbar-rollout-'));
   const fixture = path.join(tmpDir, 'rollout.jsonl');
 
   const lines = [
@@ -102,7 +102,7 @@ test('buildSnapshot prefers spark limits for spark models and default for non-sp
 });
 
 test('findRolloutForSession resolves explicit session ids and prefers cwd matches', async () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-hud-session-'));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'powerbar-session-'));
   const sessionsDir = path.join(tmpDir, 'sessions', '2026', '03', '27');
   fs.mkdirSync(sessionsDir, { recursive: true });
 
@@ -189,6 +189,50 @@ test('mergeSnapshotsPreferEnv keeps env-backed values and falls back to rollout 
     assert.equal(merged.plan.length, 1);
     assert.equal(merged.plan[0].step, 'Run tests');
     assert.equal(merged.compactCount, 3);
+  } finally {
+    process.env = prevEnv;
+  }
+});
+
+test('mergeSnapshotsPreferEnv preserves rollout rate reset times when env only provides percentages', () => {
+  const prevEnv = { ...process.env };
+  process.env.CODEX_RATE_PRIMARY_PCT = '12';
+  delete process.env.CODEX_RATE_PRIMARY_RESETS;
+  delete process.env.CODEX_RATE_PRIMARY_WINDOW_MIN;
+
+  const rolloutReset = new Date('2026-03-29T01:30:00Z');
+
+  try {
+    const merged = mergeSnapshotsPreferEnv(
+      {
+        sessionPath: '',
+        turnState: 'idle',
+        activeTools: [],
+        recentTools: [],
+        plan: [],
+        compactCount: 0,
+        ratePrimary: {
+          usedPercent: 12,
+        },
+      },
+      {
+        sessionPath: '/tmp/rollout.jsonl',
+        turnState: 'idle',
+        activeTools: [],
+        recentTools: [],
+        plan: [],
+        compactCount: 0,
+        ratePrimary: {
+          usedPercent: 24.7,
+          resetsAt: rolloutReset,
+          windowMinutes: 300,
+        },
+      },
+    );
+
+    assert.equal(merged.ratePrimary?.usedPercent, 12);
+    assert.equal(merged.ratePrimary?.resetsAt?.toISOString(), rolloutReset.toISOString());
+    assert.equal(merged.ratePrimary?.windowMinutes, 300);
   } finally {
     process.env = prevEnv;
   }

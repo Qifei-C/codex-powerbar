@@ -61,8 +61,8 @@ function formatElapsed(start: Date, end?: Date): string {
 }
 
 function detectStatusWidth(): number {
-  // CODEX_HUD_WIDTH is the TUI's actual content area width (already excludes indent).
-  const hudWidth = Number.parseInt(process.env.CODEX_HUD_WIDTH ?? '', 10);
+  // POWERBAR_WIDTH is the TUI's actual content area width (already excludes indent).
+  const hudWidth = Number.parseInt(process.env.POWERBAR_WIDTH ?? '', 10);
   if (!Number.isNaN(hudWidth) && hudWidth > 0) return hudWidth;
   const cols = Number.parseInt(process.env.COLUMNS ?? '', 10);
   if (!Number.isNaN(cols) && cols > 0) return cols;
@@ -299,7 +299,7 @@ function assembleHeader(parts: HeaderParts, width: number): string {
   if (gap >= 2) {
     // Cap the gap so badges stay near content rather than at the far-right edge.
     // The TUI footer rendering area may be slightly narrower than the reported
-    // width (due to indent, borders, or stale CODEX_HUD_WIDTH), which clips
+    // width (due to indent, borders, or stale POWERBAR_WIDTH), which clips
     // right-aligned content.  A small fixed gap avoids this fragility.
     const MAX_BADGE_GAP = 4;
     return `${parts.left}${' '.repeat(Math.min(gap, MAX_BADGE_GAP))}${parts.badges}`;

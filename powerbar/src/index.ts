@@ -63,19 +63,19 @@ function parseArgs(argv: string[]): CliArgs {
 }
 
 function printHelp(): void {
-  console.log(`codex-hud\n
+  console.log(`powerbar\n
 Usage:
-  codex-hud             Watch latest Codex rollout and refresh HUD
-  codex-hud --once      Print once and exit
-  codex-hud --status-line --once
-  codex-hud --overview  Show all active sessions
-  codex-hud --self-check  Validate installation
-  codex-hud --rollout <path> [--once]
-  codex-hud --session-id <id> [--cwd <path>] [--once]
-  codex-hud --codex-home <path>
+  powerbar             Watch latest Codex rollout and refresh HUD
+  powerbar --once      Print once and exit
+  powerbar --status-line --once
+  powerbar --overview  Show all active sessions
+  powerbar --self-check  Validate installation
+  powerbar --rollout <path> [--once]
+  powerbar --session-id <id> [--cwd <path>] [--once]
+  powerbar --codex-home <path>
 
 Options:
-  --interval <ms>       Refresh interval (default from ~/.codex-hud/config.json)
+  --interval <ms>       Refresh interval (default from ~/.powerbar/config.json)
   --status-line         Print status-line (used by codex status_line_command)
   --overview            Show all active sessions with context usage
   --self-check          Validate installation and configuration
@@ -118,10 +118,10 @@ async function tick(args: CliArgs): Promise<number> {
     return args.intervalMs ?? config.refreshMs;
   }
 
-  const sessionId = args.sessionId ?? process.env.CODEX_HUD_SESSION_ID ?? process.env.CODEX_SESSION_ID;
-  const cwdHint = args.cwdHint ?? process.env.CODEX_HUD_CWD ?? process.cwd();
+  const sessionId = args.sessionId ?? process.env.POWERBAR_SESSION_ID ?? process.env.CODEX_SESSION_ID;
+  const cwdHint = args.cwdHint ?? process.env.POWERBAR_CWD ?? process.cwd();
   const rolloutPath = args.rolloutPath
-    ?? process.env.CODEX_HUD_ROLLOUT_PATH
+    ?? process.env.POWERBAR_ROLLOUT_PATH
     ?? (sessionId ? await findRolloutForSession(sessionId, args.codexHome, cwdHint) : null)
     ?? (cwdHint ? await findLatestRolloutForCwd(cwdHint, args.codexHome) : null)
     ?? await findLatestRollout(args.codexHome);
@@ -134,7 +134,7 @@ async function tick(args: CliArgs): Promise<number> {
   if (!rolloutPath && !snapshot.model && snapshot.contextUsedPercent === undefined) {
     const waiting = args.statusLine
       ? 'HUD waiting: no rollout'
-      : '[codex-hud] No rollout file found. Start a Codex session first.';
+      : '[powerbar] No rollout file found. Start a Codex session first.';
     console.log(waiting);
     return args.intervalMs ?? config.refreshMs;
   }

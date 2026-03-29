@@ -113,7 +113,7 @@ function presetConfig(preset: HudPresetName): HudConfig {
 }
 
 export function configPath(): string {
-  return path.join(os.homedir(), '.codex-hud', 'config.json');
+  return path.join(os.homedir(), '.powerbar', 'config.json');
 }
 
 export function loadConfig(): HudConfig {

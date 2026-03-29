@@ -59,7 +59,7 @@ diff --git a/codex-rs/tui_app_server/src/chatwidget/status_surfaces.rs b/codex-r
      fn status_line_command_env_vars(&mut self) -> Vec<(String, String)> {
          let mut vars = Vec::new();
 +        if let Some(width) = self.bottom_pane.status_line_available_width() {
-+            vars.push(("CODEX_HUD_WIDTH".into(), width.to_string()));
++            vars.push(("POWERBAR_WIDTH".into(), width.to_string()));
 +        }
          if let Some(pct) = self.status_line_context_used_percent() {
              vars.push(("CODEX_CONTEXT_USED_PCT".into(), pct.to_string()));
