@@ -20,14 +20,14 @@ The active project files are currently under `Codex-HUD/`.
 
 ## Quick Start
 ```bash
-git clone https://github.com/anhannin/codex-hud.git
-cd codex-hud/Codex-HUD
+git clone https://github.com/Qifei-C/codex-powerbar.git
+cd codex-powerbar/Codex-HUD
 ./install.sh
 ```
 
 Guided install:
 ```bash
-cd codex-hud/Codex-HUD
+cd codex-powerbar/Codex-HUD
 ./install.sh --interactive
 ```
 
@@ -45,8 +45,8 @@ cd codex-hud/Codex-HUD
 ```bash
 codex --version
 grep -n "status_line_command" ~/.codex/config.toml
-node ~/codex-hud/Codex-HUD/dist/index.js --status-line --once --no-clear --cwd "$PWD"
+node ~/codex-powerbar/Codex-HUD/dist/index.js --status-line --once --no-clear --cwd "$PWD"
 ```
 
 ## Support
-- Bug reports: `https://github.com/anhannin/codex-hud/issues`
+- Bug reports: `https://github.com/Qifei-C/codex-powerbar/issues`

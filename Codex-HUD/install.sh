@@ -12,7 +12,7 @@ ACTION="full"
 CODEX_REPO_OVERRIDE=""
 FAST_BUILD=0
 REFERENCE_CODEX_VERSION=""
-PREBUILT_RELEASE_REPO="Qifei-C/codex-HUD"
+PREBUILT_RELEASE_REPO="Qifei-C/codex-powerbar"
 PREBUILT_RELEASE_TAG="codex-v0.117.0"
 FORCE_SOURCE_BUILD=0
 
@@ -929,7 +929,7 @@ uninstall() {
 }
 
 maybe_star_repo() {
-  local repo="anhannin/codex-hud"
+  local repo="Qifei-C/codex-powerbar"
   if ! command -v gh >/dev/null 2>&1; then
     return 0
   fi

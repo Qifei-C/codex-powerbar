@@ -12,13 +12,14 @@ Codex HUD is an open-source status line HUD for Codex CLI that displays Claude-H
 
 ## Quick Start
 ```bash
-git clone https://github.com/anhannin/codex-hud.git
-cd codex-hud
+git clone https://github.com/Qifei-C/codex-powerbar.git
+cd codex-powerbar/Codex-HUD
 ./install.sh
 ```
 
 Guided install:
 ```bash
+cd codex-powerbar/Codex-HUD
 ./install.sh --interactive
 ```
 
@@ -48,7 +49,7 @@ Changes do not appear in already-running Codex sessions.
 Verification commands:
 ```bash
 grep -n "status_line_command" ~/.codex/config.toml
-node ~/codex-hud/Codex-HUD/dist/index.js --status-line --once --no-clear --cwd "$PWD"
+node ~/codex-powerbar/Codex-HUD/dist/index.js --status-line --once --no-clear --cwd "$PWD"
 ```
 
 ## Commands
@@ -67,8 +68,8 @@ Minimum pre-release checklist:
 
 Quick install for users:
 ```bash
-git clone https://github.com/anhannin/codex-hud.git
-cd codex-hud
+git clone https://github.com/Qifei-C/codex-powerbar.git
+cd codex-powerbar/Codex-HUD
 ./install.sh
 ```
 
@@ -113,7 +114,7 @@ HUD • g5.3c • Usage ██░░░░░░░░ 25% (1h 30m / 5h) | █�
 - `tmux: command not found`: tmux mode is optional, not required
 
 ## Support
-- Bug reports: `https://github.com/anhannin/codex-hud/issues`
+- Bug reports: `https://github.com/Qifei-C/codex-powerbar/issues`
 
 ## Project Layout
 - `src/`: HUD parser and renderer sources

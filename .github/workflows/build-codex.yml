@@ -1,0 +1,233 @@
+name: Build patched Codex
+
+on:
+  push:
+    branches:
+      - master
+    tags: ['codex-v*']
+    paths:
+      - '.github/workflows/build-codex.yml'
+      - 'Codex-HUD/**'
+      - 'README.md'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/build-codex.yml'
+      - 'Codex-HUD/**'
+      - 'README.md'
+  workflow_dispatch:
+    inputs:
+      codex_ref:
+        description: 'OpenAI Codex git ref to build against (tag, branch, or SHA). Leave empty to use the install.sh release target.'
+        required: false
+        default: ''
+      fast_build:
+        description: 'Use fast build profile (thin LTO, parallel codegen)'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-codex-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HUD_DIR: Codex-HUD
+  CODEX_UPSTREAM: https://github.com/openai/codex.git
+  PATCH_FILE: Codex-HUD/patches/codex-statusline-command.patch
+
+jobs:
+  hud-tests:
+    name: HUD tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: Codex-HUD/package-lock.json
+
+      - name: Install HUD dependencies
+        working-directory: Codex-HUD
+        run: npm ci
+
+      - name: Run HUD tests
+        working-directory: Codex-HUD
+        run: npm test
+
+  build:
+    needs: hud-tests
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            target: aarch64-apple-darwin
+            asset: codex-darwin-arm64.tar.gz
+          - os: macos-13
+            target: x86_64-apple-darwin
+            asset: codex-darwin-x86_64.tar.gz
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            asset: codex-linux-x86_64.tar.gz
+
+    runs-on: ${{ matrix.os }}
+    name: Build (${{ matrix.target }})
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Determine codex ref
+        id: plan
+        run: |
+          release_tag="$(sed -n 's/^PREBUILT_RELEASE_TAG="\(.*\)"/\1/p' "$HUD_DIR/install.sh" | head -n1)"
+          if [[ -z "$release_tag" ]]; then
+            echo "Failed to read PREBUILT_RELEASE_TAG from $HUD_DIR/install.sh" >&2
+            exit 1
+          fi
+
+          default_ref="${release_tag#codex-}"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.codex_ref }}" ]]; then
+            codex_ref="${{ inputs.codex_ref }}"
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            codex_ref="${GITHUB_REF_NAME#codex-}"
+          else
+            codex_ref="$default_ref"
+          fi
+
+          fast_build="false"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.fast_build }}" == "true" ]]; then
+            fast_build="true"
+          fi
+
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+          echo "codex_ref=$codex_ref" >> "$GITHUB_OUTPUT"
+          echo "fast_build=$fast_build" >> "$GITHUB_OUTPUT"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang build-essential cmake pkg-config libcap-dev libseccomp-dev
+
+      - name: Clone upstream codex
+        run: |
+          git clone --depth=1 --branch "${{ steps.plan.outputs.codex_ref }}" \
+            "$CODEX_UPSTREAM" codex-upstream || \
+          git clone "$CODEX_UPSTREAM" codex-upstream && \
+            git -C codex-upstream checkout "${{ steps.plan.outputs.codex_ref }}"
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            codex-upstream/codex-rs/target
+          key: build-codex-${{ runner.os }}-${{ matrix.target }}-${{ steps.plan.outputs.codex_ref }}-${{ hashFiles('Codex-HUD/patches/codex-statusline-command.patch') }}
+          restore-keys: |
+            build-codex-${{ runner.os }}-${{ matrix.target }}-${{ steps.plan.outputs.codex_ref }}-
+            build-codex-${{ runner.os }}-${{ matrix.target }}-
+
+      - name: Apply HUD patch
+        run: |
+          cd codex-upstream
+          git apply --check "../$PATCH_FILE"
+          git apply "../$PATCH_FILE"
+          echo "Patch applied successfully"
+
+      - name: Build codex binary
+        run: |
+          cd codex-upstream/codex-rs
+
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            export CC=clang
+            export CXX=clang++
+          fi
+
+          if [[ "${{ steps.plan.outputs.fast_build }}" == "true" ]]; then
+            export CARGO_PROFILE_RELEASE_LTO="thin"
+            export CARGO_PROFILE_RELEASE_CODEGEN_UNITS="16"
+            echo "Building with fast profile (thin LTO, parallel codegen)"
+          fi
+
+          cargo build --locked --release -p codex-cli
+          ls -lh target/release/codex
+
+      - name: Package binary
+        run: |
+          cd codex-upstream/codex-rs/target/release
+          tar czf "$GITHUB_WORKSPACE/${{ matrix.asset }}" codex
+          echo "Packaged: ${{ matrix.asset }}"
+          ls -lh "$GITHUB_WORKSPACE/${{ matrix.asset }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: ${{ matrix.asset }}
+          retention-days: 30
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#codex-}"
+
+          # Collect all .tar.gz files
+          files=()
+          for f in artifacts/*/*.tar.gz; do
+            files+=("$f")
+          done
+
+          gh release create "$tag" "${files[@]}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Patched Codex $version" \
+            --notes "$(cat <<EOF
+          Patched Codex binary built from upstream [$version](https://github.com/openai/codex/releases/tag/$version) with HUD status-line integration.
+
+          ## Assets
+          | Platform | Architecture | Asset |
+          |----------|-------------|-------|
+          | macOS | Apple Silicon (arm64) | \`codex-darwin-arm64.tar.gz\` |
+          | macOS | Intel (x86_64) | \`codex-darwin-x86_64.tar.gz\` |
+          | Linux | x86_64 | \`codex-linux-x86_64.tar.gz\` |
+
+          ## Install
+          \`\`\`bash
+          # Automatic (tries prebuilt first, falls back to source)
+          ./Codex-HUD/install.sh --full
+
+          # Manual
+          curl -fSL https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/codex-darwin-arm64.tar.gz | tar xz
+          mv codex ~/.local/bin/codex
+          \`\`\`
+          EOF
+          )"
+
+          echo "Release created: $tag"

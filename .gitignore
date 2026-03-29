@@ -1,6 +1,9 @@
 # Keep this repo focused on Codex-HUD files.
 *
 !.gitignore
+!.github/
+!.github/workflows/
+!.github/workflows/build-codex.yml
 !README.md
 !Codex-HUD/
 !Codex-HUD/**
