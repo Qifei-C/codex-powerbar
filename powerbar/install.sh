@@ -436,6 +436,9 @@ detect_platform_asset() {
     x86_64|amd64)  arch="x86_64" ;;
     *)             return 1 ;;
   esac
+  if [[ "$os" == "darwin" && "$arch" == "x86_64" ]]; then
+    return 1
+  fi
   asset="codex-${os}-${arch}.tar.gz"
   printf '%s\n' "$asset"
 }
@@ -446,7 +449,12 @@ try_download_prebuilt() {
   fi
 
   local asset
-  asset="$(detect_platform_asset 2>/dev/null)" || return 1
+  if ! asset="$(detect_platform_asset 2>/dev/null)"; then
+    if [[ "$(uname -s)" == "Darwin" && "$(uname -m)" == "x86_64" ]]; then
+      print_step "Prebuilt Intel macOS binary is no longer published — falling back to source build"
+    fi
+    return 1
+  fi
   local url="https://github.com/${PREBUILT_RELEASE_REPO}/releases/download/${PREBUILT_RELEASE_TAG}/${asset}"
 
   print_step "Trying prebuilt binary: $asset"

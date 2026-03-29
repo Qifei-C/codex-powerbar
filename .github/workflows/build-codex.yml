@@ -74,10 +74,6 @@ jobs:
           - os: macos-14
             target: aarch64-apple-darwin
             asset: codex-darwin-arm64.tar.gz
-          - os: macos-15
-            target: x86_64-apple-darwin
-            asset: codex-darwin-x86_64.tar.gz
-            cross: true
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             asset: codex-linux-x86_64.tar.gz
@@ -246,7 +242,6 @@ jobs:
           | Platform | Architecture | Asset |
           |----------|-------------|-------|
           | macOS | Apple Silicon (arm64) | \`codex-darwin-arm64.tar.gz\` |
-          | macOS | Intel (x86_64) | \`codex-darwin-x86_64.tar.gz\` |
           | Linux | x86_64 | \`codex-linux-x86_64.tar.gz\` |
 
           ## Install
