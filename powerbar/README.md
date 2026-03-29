@@ -1,127 +1,253 @@
 # Powerbar
 
-Powerbar is an open-source status line HUD for Codex CLI that displays Claude-HUD style usage and status information in the terminal.
+Powerbar is a HUD for Codex CLI. It is built for the footer/status-line use case: keep the high-value state visible without leaving the terminal.
+
+It combines:
+
+- Codex status-line env data for the most current usage percentages
+- rollout JSONL parsing for richer session context, tool history, plan content, and reset-time backfill
+- a patched `codex` binary plus `status_line_command` wiring so the HUD is always present in active sessions
 
 ![Powerbar screenshot](docs/assets/hud-example.png)
 
-## What It Does
-- Parses Codex rollout logs (`~/.codex/sessions/**/rollout-*.jsonl`)
-- Shows current model, project, and Git branch state
-- Displays 5-hour and 7-day usage bars with remaining reset time
-- Uses Spark limits when the active model is `spark`, otherwise uses default limits
+## What The HUD Shows
 
-## Quick Start
+- active model and reasoning effort
+- current project and Git branch
+- context usage and context window size
+- 5-hour and 7-day usage windows, with reset time when available
+- current plan step
+- recent / active tool activity summarized into buckets like `Read`, `Edit`, `Grep`, `Bash`
+- approval mode, sandbox mode, and selected environment details
+- compact count, feature badges, and optional session metadata
+
+The current expanded layout is optimized for the Codex footer constraint:
+
+1. header
+2. context + rate windows
+3. environment
+4. `plan | tools`
+
+## How Data Priority Works
+
+Powerbar does not trust a single source blindly.
+
+- usage percentages come from live Codex env vars when present
+- reset times and rate window lengths are merged field-by-field so rollout data can fill gaps when env only provides percentages
+- plan text comes from rollout when env only exposes plan counts
+- tool summaries come from rollout events
+
+This is deliberate: the merged snapshot is more accurate than rollout-only, and more complete than env-only.
+
+## Install
+
+### Guided install
+
 ```bash
-git clone https://github.com/Qifei-C/codex-powerbar.git
-cd codex-powerbar/powerbar
 ./install.sh
 ```
 
-Guided install:
+This is the default interactive flow.
+
+### Non-interactive install
+
 ```bash
-cd codex-powerbar/powerbar
-./install.sh --interactive
+./install.sh --full
 ```
 
-Re-running `./install.sh` after patch updates will now refresh the previously applied Codex patch automatically before rebuilding.
+### Force source build
 
-## Supported Environment
-- Target: HUD harness for Codex CLI on Linux
-- OS: Linux (Ubuntu/Debian, Fedora/RHEL, Arch, openSUSE)
-- Shell: bash, zsh
-- Runtime: Node.js + npm, Rust toolchain (`cargo`)
-- Package managers auto-detected by installer: `apt-get`, `dnf`, `pacman`, `zypper`
-- Not a primary target: native Windows/macOS
-
-`install.sh` automatically:
-- Builds the HUD (`npm ci`, `npm run build`)
-- Applies the Codex source patch and builds patched `codex`
-- Installs patched binary to `~/.local/bin/codex`
-- Configures `~/.codex/config.toml` with `status_line_command`
-
-## Apply in Current Terminal
-Changes do not appear in already-running Codex sessions.
-
-1. Exit the current Codex session
-2. Start Codex again
-3. Check the HUD in the bottom status line
-
-Verification commands:
 ```bash
+./install.sh --source
+```
+
+### Faster source build
+
+```bash
+./install.sh --source --fast
+```
+
+### Uninstall
+
+```bash
+./install.sh --uninstall
+```
+
+## What The Installer Does
+
+`install.sh` is responsible for the full local setup:
+
+- builds the HUD with `npm ci` and `npm run build`
+- installs the runtime to `~/.powerbar/dist`
+- configures `~/.codex/config.toml` with `status_line_command`
+- installs a patched `codex` binary to `~/.local/bin/codex`
+- prefers a GitHub prebuilt binary when one exists for the platform
+- falls back to source build when prebuilt assets are unavailable
+
+## Supported Platforms
+
+### Prebuilt patched binaries
+
+- macOS Apple Silicon (`codex-darwin-arm64.tar.gz`)
+- Linux x86_64 (`codex-linux-x86_64.tar.gz`)
+
+### Source-build fallback
+
+- Intel macOS
+- any environment where prebuilt assets are unavailable but Rust and build dependencies are present
+
+### Not a primary target
+
+- Windows
+
+## Verify The Install
+
+Start a fresh shell or a fresh Codex session after install, then run:
+
+```bash
+command -v codex
+codex --version
 grep -n "status_line_command" ~/.codex/config.toml
-powerbar --status-line --once --no-clear --cwd "$PWD"
+node ~/.powerbar/dist/index.js --status-line --once --no-clear --cwd "$PWD"
 ```
 
-## Commands
+Powerbar also ships a self-check:
+
 ```bash
-npm run build      # Build TypeScript output
-npm run dev        # Build in watch mode
-npm test           # Build + run Node tests
+node dist/index.js --self-check
 ```
 
-## Release / Deployment
-Minimum pre-release checklist:
-1. Run local verification: `npm test`
-2. Validate install on a fresh terminal: `./install.sh`
-3. Confirm runtime behavior: `codex --version` and HUD output
-4. Push commit/tag and update GitHub release notes
+## Runtime Commands
 
-Quick install for users:
-```bash
-git clone https://github.com/Qifei-C/codex-powerbar.git
-cd codex-powerbar/powerbar
-./install.sh
-```
+From `powerbar/`:
 
-## Color Control
 ```bash
-NO_COLOR=1 codex                 # Disable HUD colors
-FORCE_COLOR=1 codex              # Force-enable HUD colors
-FORCE_COLOR=0 codex              # Force-disable HUD colors
+npm run build
+npm run dev
+npm test
+node dist/index.js --once
+node dist/index.js --status-line --once --no-clear --cwd "$PWD"
+node dist/index.js --overview
+node dist/index.js --self-check
 ```
 
 ## Configuration
-Optional config lives at `~/.powerbar/config.json`.
+
+Optional runtime config lives at:
+
+```text
+~/.powerbar/config.json
+```
 
 Example:
+
 ```json
 {
   "preset": "essential",
   "lineLayout": "expanded",
+  "refreshMs": 700,
   "pathLevels": 2,
   "showTools": true,
   "showPlan": true,
+  "showEnvironment": true,
   "showGitAheadBehind": true,
   "showGitFileStats": false,
   "contextDisplay": "both",
-  "sevenDayThreshold": 80
+  "sevenDayThreshold": 60
 }
 ```
 
-Presets:
-- `minimal`: compact single-line HUD, no tools/todos
-- `essential`: balanced default
-- `full`: expanded layout with richer git/session detail
+### Presets
 
-## Example HUD Line
+- `minimal`: compact, one-line, no detail rows
+- `essential`: default balance for daily use
+- `full`: richer expanded layout, more detail rows, lower 7-day display threshold
+
+### Important knobs
+
+- `lineLayout`: `compact` or `expanded`
+- `showTools`: enable tool summary row content
+- `showPlan`: enable plan row content
+- `showEnvironment`: show approval/sandbox/environment info
+- `contextDisplay`: `percent`, `tokens`, `both`, or `remaining`
+- `sevenDayThreshold`: controls when the 7-day bar appears in tighter layouts
+
+## Codex Integration
+
+The installer writes a `status_line_command` entry into `~/.codex/config.toml`.
+
+Powerbar also respects Codex-provided status-line item filtering through:
+
 ```text
-HUD • g5.3c • Usage ██░░░░░░░░ 25% (1h 30m / 5h) | ████████░░ 80% (1d 3h / 7d)
+CODEX_STATUS_LINE_ITEMS
 ```
 
+That means Codex-native footer selection still works, while Powerbar keeps HUD-only extras such as plan and tool summaries.
+
+## Release And Build Workflow
+
+The repository root owns CI and release automation.
+
+- `master` pushes rebuild the patched binaries and refresh the rolling `latest` pre-release
+- `codex-v*` tags produce versioned releases
+- the workflow file is `../.github/workflows/build-codex.yml`
+
+The current workflow publishes:
+
+- `codex-darwin-arm64.tar.gz`
+- `codex-linux-x86_64.tar.gz`
+
+## Repository Layout
+
+- `src/`: parser, merger, renderer, overview, self-check
+- `tests/`: Node test suite
+- `scripts/`: config and patch helper scripts
+- `patches/`: Codex patch set
+- `docs/`: screenshots, analysis, launch copy
+- `install.sh`: installer / updater / uninstall entry point
+
 ## Troubleshooting
-- HUD looks broken: reinstall latest build, then restart Codex session
-- Install succeeded but HUD not shown: restart sessions launched before install
 
-## Support
-- Bug reports: `https://github.com/Qifei-C/codex-powerbar/issues`
+### HUD does not appear
 
-## Project Layout
-- `src/`: HUD parser and renderer sources
-- `dist/`: Build output
-- `scripts/`: Install/patch/config scripts
-- `patches/`: Codex TUI patch files
-- `tests/`: Test files
-- `docs/`: Analysis and design docs
+- confirm `status_line_command` exists in `~/.codex/config.toml`
+- restart Codex; existing sessions do not pick up footer changes
+- run `node ~/.powerbar/dist/index.js --status-line --once --no-clear --cwd "$PWD"` manually
 
-## Promotion
-- Launch copy templates: `docs/promo/launch-kit.md`
+### Usage percentages look stale
+
+- Powerbar prefers live env percentages, so stale values usually mean the session itself is not exporting fresh status-line data
+- verify you are on a patched `codex` from `~/.local/bin/codex`
+
+### Reset time is missing
+
+- this means neither env nor rollout provided a usable reset timestamp for that window
+- Powerbar will still show the window length as a fallback
+
+### Tool summaries are missing
+
+- tool summaries come from rollout events, not just env counters
+- make sure the active session is writing rollout JSONL and that Powerbar is resolving the correct session
+
+### Intel macOS install downloads fail
+
+- expected: Intel macOS no longer has a prebuilt release asset
+- use `./install.sh --source`
+
+## Contributing
+
+Before pushing changes:
+
+```bash
+npm test
+```
+
+If the change affects the patched binary or install flow, also verify:
+
+```bash
+./install.sh --full
+```
+
+Issues and PRs belong in:
+
+- `https://github.com/Qifei-C/codex-powerbar/issues`
