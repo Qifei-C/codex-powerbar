@@ -135,7 +135,7 @@ test('statusLineItems filters HUD sections', () => {
   // HUD-only extras should remain visible; only Codex-mapped items are filtered.
   assert.ok(lines.some((l) => l.includes('Approvals:')));
   assert.ok(lines.some((l) => l.includes('Bash')));
-  assert.ok(lines.some((l) => l.includes('todos')));
+  assert.ok(lines.some((l) => l.includes('Run tests')));
   assert.ok(lines[0].includes('⏱'));
 });
 
