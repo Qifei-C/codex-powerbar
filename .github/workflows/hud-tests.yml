@@ -1,0 +1,45 @@
+name: HUD tests
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'README.md'
+      - 'powerbar/**'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'README.md'
+      - 'powerbar/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hud-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  hud-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: powerbar/package-lock.json
+
+      - name: Install HUD dependencies
+        working-directory: powerbar
+        run: npm ci
+
+      - name: Run HUD tests
+        working-directory: powerbar
+        run: npm test

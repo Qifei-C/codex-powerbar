@@ -55,7 +55,12 @@ Notes:
 
 ## Release Model
 
-- pushing to `master` updates the rolling `latest` pre-release with fresh patched binaries
+- `master` pushes run lightweight HUD CI
+- patched binary builds on `master` only run when the workflow file, installer, or patch set changes
+- `workflow_dispatch` refreshes the rolling `latest` pre-release explicitly
 - pushing a `codex-v*` tag creates a versioned release
 
-The workflow lives at `.github/workflows/build-codex.yml`.
+Workflows live at:
+
+- `.github/workflows/hud-tests.yml`
+- `.github/workflows/build-codex.yml`

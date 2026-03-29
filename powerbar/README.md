@@ -188,9 +188,10 @@ That means Codex-native footer selection still works, while Powerbar keeps HUD-o
 
 The repository root owns CI and release automation.
 
-- `master` pushes rebuild the patched binaries and refresh the rolling `latest` pre-release
+- `master` pushes run lightweight HUD CI through `../.github/workflows/hud-tests.yml`
+- patched binary builds on `master` only run when `../.github/workflows/build-codex.yml`, `patches/`, or `install.sh` change
+- `workflow_dispatch` refreshes the rolling `latest` pre-release explicitly
 - `codex-v*` tags produce versioned releases
-- the workflow file is `../.github/workflows/build-codex.yml`
 
 The current workflow publishes:
 

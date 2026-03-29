@@ -4,6 +4,7 @@
 !.github/
 !.github/workflows/
 !.github/workflows/build-codex.yml
+!.github/workflows/hud-tests.yml
 !README.md
 !powerbar/
 !powerbar/**
