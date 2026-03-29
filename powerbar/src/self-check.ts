@@ -31,9 +31,6 @@ export function runSelfCheck(): void {
   // npm
   results.push(check('npm', () => commandVersion('npm', ['--version'])));
 
-  // tmux
-  results.push(check('tmux', () => commandVersion('tmux', ['-V'])));
-
   // codex CLI
   results.push(check('codex CLI', () => {
     const codexPath = path.join(os.homedir(), '.local', 'bin', 'codex');

@@ -30,6 +30,5 @@
 
 ## Next Iterations
 - Better active-session selection when multiple Codex sessions are running.
-- Optional tmux status bar integration.
 - More robust plan extraction from streamed deltas.
 - Packaging and release automation (npm + GitHub release binaries if needed).

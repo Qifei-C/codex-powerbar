@@ -28,14 +28,13 @@ fatal() {
 
 print_usage() {
   cat <<'USAGE'
-Usage: ./install.sh [--full] [--fast] [--source] [--tmux] [--uninstall] [--help]
+Usage: ./install.sh [--full] [--fast] [--source] [--uninstall] [--help]
 
 Modes:
   default            Interactive guided setup (recommended)
   --full             One-shot full install without prompts
   --fast             Use faster Rust build profile (thin LTO, parallel codegen)
   --source           Skip prebuilt binary download, always build from source
-  --tmux             Lightweight install: HUD via tmux status bar (no Codex rebuild)
   --uninstall        Remove patched codex binary, restore config, clean PATH entries
 
 Interactive choices:
@@ -43,7 +42,6 @@ Interactive choices:
   2. Build HUD only               Rebuild local dist/
   3. Build HUD + update config    Rebuild HUD and wire status_line_command
   4. Patch/build Codex only       Rebuild patched codex binary
-  5. tmux HUD                     Build HUD + enable tmux status bar (no Codex rebuild)
 USAGE
 }
 
@@ -623,7 +621,7 @@ verify_installed_codex() {
 }
 
 interactive_setup() {
-  [[ -t 0 && -t 1 ]] || fatal "Interactive setup requires a terminal. Use --full or --tmux instead."
+  [[ -t 0 && -t 1 ]] || fatal "Interactive setup requires a terminal. Use --full instead."
 
   print_step "Interactive setup"
   echo "Choose install mode:"
@@ -631,7 +629,6 @@ interactive_setup() {
   echo "  2) Build HUD only"
   echo "  3) Build HUD + update Codex config"
   echo "  4) Patch/build patched Codex only"
-  echo "  5) tmux HUD         — lightweight, no Codex rebuild, works with stock codex"
 
   local choice
   choice="$(prompt_with_default "Select mode" "1")"
@@ -640,7 +637,6 @@ interactive_setup() {
     2) ACTION="hud-only" ;;
     3) ACTION="hud-config" ;;
     4) ACTION="codex-only" ;;
-    5) ACTION="tmux" ;;
     *) fatal "Unknown interactive selection: $choice" ;;
   esac
 
@@ -673,9 +669,6 @@ interactive_setup() {
     codex-only)
       echo "[install] Will patch/build/install patched codex"
       ;;
-    tmux)
-      echo "[install] Will build powerbar and enable tmux status bar HUD (no Codex rebuild)"
-      ;;
   esac
   if [[ -n "$CODEX_REPO_OVERRIDE" ]]; then
     echo "[install] Codex source path: $CODEX_REPO_OVERRIDE"
@@ -702,11 +695,6 @@ parse_args() {
         FORCE_SOURCE_BUILD=1
         shift
         ;;
-      --tmux)
-        ACTION="tmux"
-        INTERACTIVE=0
-        shift
-        ;;
       --uninstall)
         uninstall
         exit 0
@@ -720,52 +708,6 @@ parse_args() {
         ;;
     esac
   done
-}
-
-install_tmux_hud() {
-  ensure_command tmux "tmux is required for this mode (install tmux first)"
-  build_hud
-  install_powerbar_cli
-
-  local cmd="cd '$REPO_DIR' && node dist/index.js --tmux-line --once 2>/dev/null"
-
-  print_step "Configuring tmux status bar"
-  tmux set-option -g status on 2>/dev/null || true
-  tmux set-option -g status-interval 2 2>/dev/null || true
-  tmux set-option -g status-right-length 200 2>/dev/null || true
-  tmux set-option -g status-right "#($cmd)" 2>/dev/null || true
-
-  # Persist in tmux.conf so it survives restarts
-  local tmux_conf="$HOME/.tmux.conf"
-  local marker_start="# >>> powerbar tmux >>>"
-  local marker_end="# <<< powerbar tmux <<<"
-
-  if [[ -f "$tmux_conf" ]] && grep -Fq "$marker_start" "$tmux_conf"; then
-    # Replace existing block
-    local tmp
-    tmp="$(mktemp)"
-    awk -v ms="$marker_start" -v me="$marker_end" '
-      $0 == ms { skip=1; next }
-      $0 == me { skip=0; next }
-      !skip { print }
-    ' "$tmux_conf" > "$tmp"
-    mv "$tmp" "$tmux_conf"
-  fi
-
-  {
-    echo ""
-    echo "$marker_start"
-    echo "set-option -g status on"
-    echo "set-option -g status-interval 2"
-    echo "set-option -g status-right-length 200"
-    echo "set-option -g status-right \"#($cmd)\""
-    echo "$marker_end"
-  } >> "$tmux_conf"
-
-  print_step "Done"
-  echo "tmux HUD enabled in status bar and persisted in $tmux_conf"
-  echo "Works with stock codex — no patched binary needed."
-  echo "To disable: $REPO_DIR/scripts/tmux-disable.sh"
 }
 
 detect_existing_codex() {
@@ -913,7 +855,7 @@ uninstall() {
     echo "  Removed status_line_command from $config"
   fi
 
-  # 5. Clean tmux config
+  # 5. Clean legacy tmux config
   local tmux_conf="$HOME/.tmux.conf"
   local tmux_marker_start="# >>> powerbar tmux >>>"
   local tmux_marker_end="# <<< powerbar tmux <<<"
@@ -998,7 +940,7 @@ main() {
     interactive_setup
   fi
 
-  if [[ "$ACTION" != "tmux" && "$ACTION" != "hud-only" ]]; then
+  if [[ "$ACTION" != "hud-only" ]]; then
     detect_existing_codex
   fi
 
@@ -1019,12 +961,6 @@ main() {
     echo "HUD rebuilt at: $REPO_DIR/dist/index.js"
     echo "Powerbar installed at: $HOME/.local/bin/powerbar"
     echo "HUD command wired in ~/.codex/config.toml via [tui].status_line_command"
-    return 0
-  fi
-
-  if [[ "$ACTION" == "tmux" ]]; then
-    install_tmux_hud
-    maybe_star_repo
     return 0
   fi
 

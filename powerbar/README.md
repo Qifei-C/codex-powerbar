@@ -111,7 +111,6 @@ HUD • g5.3c • Usage ██░░░░░░░░ 25% (1h 30m / 5h) | █�
 ## Troubleshooting
 - HUD looks broken: reinstall latest build, then restart Codex session
 - Install succeeded but HUD not shown: restart sessions launched before install
-- `tmux: command not found`: tmux mode is optional, not required
 
 ## Support
 - Bug reports: `https://github.com/Qifei-C/codex-powerbar/issues`

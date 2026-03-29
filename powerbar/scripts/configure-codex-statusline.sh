@@ -38,7 +38,7 @@ if [[ ! -f "$CONFIG_PATH" ]]; then
 fi
 
 STATUS_LINE='status_line = []'
-STATUS_CMD='status_line_command = "powerbar --status-line --once --no-clear --cwd \"\$PWD\""'
+STATUS_CMD='status_line_command = "powerbar --status-line --once --no-clear --cwd \\\"\\$PWD\\\""'
 
 TMP_FILE="$(mktemp)"
 trap 'rm -f "$TMP_FILE"' EXIT
