@@ -221,6 +221,65 @@ test('renderStatusLine resolves compact preset into one line', () => {
   assert.ok(line.includes('U5'));
 });
 
+test('renderStatusLine renders plan and tools on the same line', () => {
+  const line = renderStatusLine(
+    {
+      sessionPath: '/tmp/rollout.jsonl',
+      cwd: '/repo/project',
+      model: 'gpt-5.4',
+      turnState: 'running',
+      contextUsedPercent: 35,
+      contextTokens: 90000,
+      contextWindow: 258000,
+      ratePrimary: { usedPercent: 10 },
+      activeTools: [{
+        id: '1',
+        label: 'npm test',
+        source: 'exec',
+        status: 'running',
+        startTime: new Date('2026-01-01T00:00:00Z'),
+      }],
+      recentTools: [],
+      plan: [{ status: 'in_progress', step: 'Run tests' }],
+      compactCount: 0,
+      environment: {
+        approvalPolicy: 'on-request',
+        sandboxMode: 'workspace-write',
+        collaborationMode: 'default',
+        activeShells: 1,
+        agentsCount: 0,
+        instructionsCount: 0,
+        rulesCount: 0,
+        mcpServers: 0,
+      },
+      sessionStart: new Date(Date.now() - 5 * 60 * 1000),
+    },
+    {
+      preset: 'essential',
+      refreshMs: 700,
+      lineLayout: 'expanded',
+      showDetails: true,
+      pathLevels: 2,
+      maxTools: 3,
+      showTools: true,
+      showPlan: true,
+      showRates: true,
+      showSessionPath: false,
+      showGitAheadBehind: true,
+      showGitFileStats: false,
+      showEnvironment: true,
+      sevenDayThreshold: 60,
+      contextDisplay: 'both',
+      badges: { ...DEFAULT_BADGES },
+    },
+  );
+
+  const detailLine = line.split('\n').find((entry) => entry.includes('Run tests'));
+  assert.ok(detailLine);
+  assert.ok(detailLine.includes('Bash'));
+  assert.ok(line.includes('Approvals:'));
+});
+
 test('showDetails hides HUD-only details while keeping core status content', () => {
   const lines = render(
     {

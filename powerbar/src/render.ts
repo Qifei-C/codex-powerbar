@@ -466,6 +466,11 @@ function renderCompactCount(count: number): string | null {
   return dim(`↻ ${count} compact${count > 1 ? 's' : ''}`);
 }
 
+function combinePlanAndTools(planLine: string | null, toolsLine: string | null): string | null {
+  if (planLine && toolsLine) return `${planLine}${dim(' | ')}${toolsLine}`;
+  return planLine ?? toolsLine;
+}
+
 function buildExpandedLines(snapshot: HudSnapshot, config: HudConfig): string[] {
   // Header is returned as parts so the caller can assemble with badge-aware truncation.
   const headerParts = buildHeaderParts(snapshot, config, false);
@@ -479,19 +484,22 @@ function buildExpandedLines(snapshot: HudSnapshot, config: HudConfig): string[] 
     lines.push(compactTag ? `${contextUsage} ${compactTag}` : contextUsage);
   }
 
-  if (config.showDetails && config.showEnvironment && snapshot.environment) {
-    const envLine = renderEnvironment(snapshot.environment);
-    if (envLine) lines.push(envLine);
-  }
+  const envLine = config.showDetails && config.showEnvironment && snapshot.environment
+    ? renderEnvironment(snapshot.environment)
+    : null;
+  const planLine = config.showDetails && config.showPlan
+    ? renderPlan(snapshot)
+    : null;
+  const toolsLine = config.showDetails && config.showTools && config.maxTools > 0
+    ? summarizeTools(snapshot)
+    : null;
 
-  if (config.showDetails && config.showPlan) {
-    const plan = renderPlan(snapshot);
-    if (plan) lines.push(plan);
-  }
-
-  if (config.showDetails && config.showTools && config.maxTools > 0) {
-    const tools = summarizeTools(snapshot);
-    if (tools) lines.push(tools);
+  const detailLines = [
+    envLine,
+    combinePlanAndTools(planLine, toolsLine),
+  ];
+  for (const line of detailLines) {
+    if (line) lines.push(line);
   }
 
   if (config.showSessionPath && itemEnabled(snapshot, 'session-id')) lines.push(dim(snapshot.sessionPath));
