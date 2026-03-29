@@ -41,6 +41,11 @@ function simplifyCommand(command: unknown): string {
   if (!Array.isArray(command)) return 'command';
   const words = command.filter((v) => typeof v === 'string') as string[];
   if (words.length === 0) return 'command';
+  // Strip shell wrapper (e.g. /bin/zsh -lc "actual command")
+  if (words.length >= 3 && /\b(bash|zsh|sh)\b/.test(words[0]) && words[1].startsWith('-')) {
+    const inner = words.slice(2).join(' ');
+    return inner.length > 42 ? `${inner.slice(0, 39)}...` : inner;
+  }
   const joined = words.join(' ');
   return joined.length > 42 ? `${joined.slice(0, 39)}...` : joined;
 }
@@ -331,6 +336,23 @@ export async function buildSnapshot(rolloutPath: string): Promise<HudSnapshot> {
       continue;
     }
 
+    // Plan updates arrive as response_item function_call with name "update_plan".
+    if (type === 'response_item' && payload && typeof payload === 'object') {
+      const ri = payload as { type?: unknown; name?: unknown; arguments?: unknown };
+      if (ri.type === 'function_call' && ri.name === 'update_plan' && typeof ri.arguments === 'string') {
+        try {
+          const parsed = JSON.parse(ri.arguments) as Record<string, unknown>;
+          const plan = parsePlan(parsed);
+          if (plan.length > 0) {
+            snapshot.plan = plan;
+          }
+        } catch {
+          // invalid JSON in arguments
+        }
+      }
+      continue;
+    }
+
     if (type !== 'event_msg' || !payload || typeof payload !== 'object') {
       continue;
     }
@@ -461,7 +483,47 @@ export async function buildSnapshot(rolloutPath: string): Promise<HudSnapshot> {
         existing.status = 'completed';
         existing.endTime = at;
         running.delete(id);
+      } else {
+        let label = 'mcp tool';
+        const invocation = event.invocation;
+        if (invocation && typeof invocation === 'object') {
+          const iv = invocation as { server?: unknown; tool?: unknown };
+          if (typeof iv.server === 'string' && typeof iv.tool === 'string') {
+            label = `${iv.server}/${iv.tool}`;
+          }
+        }
+        allTools.push({ id, label, source: 'mcp', status: 'completed', startTime: at, endTime: at });
       }
+      continue;
+    }
+
+    if (eventType === 'patch_apply_end') {
+      const id = typeof event.call_id === 'string' ? event.call_id : `patch-${at.getTime()}`;
+      const changes = event.changes;
+      let target: string | undefined;
+      if (changes && typeof changes === 'object') {
+        const paths = Object.keys(changes as Record<string, unknown>);
+        if (paths.length > 0) {
+          target = paths[0].split(/[/\\]/).pop();
+        }
+      }
+      const status = event.success === true ? 'completed' : 'failed';
+      allTools.push({ id, label: 'patch_apply', target, source: 'exec', status, startTime: at, endTime: at });
+      continue;
+    }
+
+    if (eventType === 'web_search_end') {
+      const id = typeof event.call_id === 'string' ? event.call_id : `ws-${at.getTime()}`;
+      const query = typeof event.query === 'string' ? event.query : undefined;
+      allTools.push({
+        id,
+        label: 'web_search',
+        target: query && query.length > 30 ? `${query.slice(0, 27)}...` : query,
+        source: 'mcp',
+        status: 'completed',
+        startTime: at,
+        endTime: at,
+      });
       continue;
     }
   }

@@ -20,8 +20,8 @@ Usage: configure-codex-statusline.sh [--config <path>] [--repo-dir <path>]
 
 Updates Codex config.toml with:
   [tui]
-  status_line = []
-  status_line_command = "powerbar --status-line --once --no-clear --cwd \"$PWD\""
+  status_line = ["model-name", "model-with-reasoning", "current-dir", "project-root", "git-branch", "context-remaining", "context-used", "five-hour-limit", "weekly-limit", "fast-mode", "context-window-size"]
+  status_line_command = "node ~/.powerbar/dist/index.js --status-line --once --no-clear --cwd \"$PWD\""
 USAGE
       exit 0
       ;;
@@ -37,8 +37,8 @@ if [[ ! -f "$CONFIG_PATH" ]]; then
   : > "$CONFIG_PATH"
 fi
 
-STATUS_LINE='status_line = []'
-STATUS_CMD='status_line_command = "powerbar --status-line --once --no-clear --cwd \\\"\\$PWD\\\""'
+STATUS_LINE='status_line = ["model-name", "model-with-reasoning", "current-dir", "project-root", "git-branch", "context-remaining", "context-used", "five-hour-limit", "weekly-limit", "fast-mode", "context-window-size"]'
+STATUS_CMD='status_line_command = "node '"$HOME"'/.powerbar/dist/index.js --status-line --once --no-clear --cwd \\\"$PWD\\\""'
 
 TMP_FILE="$(mktemp)"
 trap 'rm -f "$TMP_FILE"' EXIT

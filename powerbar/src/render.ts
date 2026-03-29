@@ -134,11 +134,17 @@ function colorPercent(percent: number, text: string): string {
   return blue(text);
 }
 
-function renderWindow(label: string, percent: number, resetsAt?: Date): string {
+function renderWindow(label: string, percent: number, resetsAt?: Date, windowMinutes?: number): string {
   const resetText = formatRemaining(resetsAt);
   const body = `${colorPercent(percent, bar(percent, 10))} ${colorPercent(percent, `${percent}%`)}`;
-  if (!resetText) return `${dim(label)} ${body}`;
-  return `${dim(label)} ${body} ${dim(`(resets in ${resetText})`)}`;
+  if (resetText) return `${dim(label)} ${body} ${dim(`(resets in ${resetText})`)}`;
+  if (windowMinutes && windowMinutes > 0) {
+    const windowLabel = windowMinutes >= 24 * 60
+      ? `${Math.round(windowMinutes / (24 * 60))}d`
+      : `${Math.round(windowMinutes / 60)}h`;
+    return `${dim(label)} ${body} ${dim(`(${windowLabel} window)`)}`;
+  }
+  return `${dim(label)} ${body}`;
 }
 
 function gitDetails(snapshot: HudSnapshot, config: HudConfig): string {
@@ -164,13 +170,32 @@ function gitDetails(snapshot: HudSnapshot, config: HudConfig): string {
 }
 
 function toolBucket(tool: ToolActivity): string {
-  if (tool.source === 'exec') return 'Bash';
-
   const lower = tool.label.toLowerCase();
+
+  // Codex file edits via patch_apply
+  if (lower === 'patch_apply') return 'Edit';
+
+  // Web searches
+  if (lower === 'web_search') return 'Search';
+
+  // Shell commands — classify by the leading command
+  if (tool.source === 'exec') {
+    // Extract the first word (the actual command)
+    const firstWord = lower.replace(/^['"]/, '').split(/[\s|;&]/)[0].split('/').pop() ?? '';
+    if (['cat', 'head', 'tail', 'less', 'bat'].includes(firstWord)) return 'Read';
+    if (['sed', 'awk'].includes(firstWord) && /['"]?\d+[,p]/.test(lower)) return 'Read';
+    if (['rg', 'grep', 'ag', 'ack'].includes(firstWord)) return 'Grep';
+    if (['find', 'ls', 'tree', 'fd', 'exa'].includes(firstWord)) return 'List';
+    if (['sed', 'patch', 'tee'].includes(firstWord)) return 'Edit';
+    if (firstWord === 'git') return 'Git';
+    return 'Bash';
+  }
+
+  // MCP tools
   if (lower.includes('read')) return 'Read';
   if (lower.includes('write') || lower.includes('edit') || lower.includes('patch')) return 'Edit';
-  if (lower.includes('search') || lower.includes('grep') || lower.includes('find') || lower.includes('query')) return 'Search';
-  if (lower.includes('list')) return 'List';
+  if (lower.includes('grep') || lower.includes('search') || lower.includes('find') || lower.includes('query')) return 'Grep';
+  if (lower.includes('list') || lower.includes('glob')) return 'List';
   return 'Tool';
 }
 
@@ -215,15 +240,15 @@ function renderPlan(snapshot: HudSnapshot): string | null {
   const completed = snapshot.plan.filter((p) => p.status === 'completed').length;
 
   if (completed === total) {
-    return `${green('✓')} ${dim(`All todos complete (${completed}/${total})`)}`;
+    return `${green('✓')} ${dim(`All steps complete (${completed}/${total})`)}`;
   }
 
   const running = snapshot.plan.find((p) => p.status === 'in_progress');
   const pending = snapshot.plan.find((p) => p.status === 'pending');
-  const title = running?.step ?? pending?.step;
-  const state = running ? yellow('◐') : '▸';
+  const active = running ?? pending;
+  const icon = running ? yellow('◐') : '▸';
 
-  return `${state} ${dim(`${completed}/${total} todos`)}${title ? dim(` • ${title}`) : ''}`;
+  return `${icon} ${dim(`${completed}/${total}`)}${active?.step ? dim(` ${active.step}`) : ''}`;
 }
 
 /** Header split into left content and optional right-aligned badges. */
@@ -334,12 +359,15 @@ function buildContextUsageLine(snapshot: HudSnapshot, config: HudConfig): string
 
   if (config.showRates && snapshot.ratePrimary && itemEnabled(snapshot, 'five-hour-limit')) {
     const primaryPercent = Math.round(snapshot.ratePrimary.usedPercent);
-    let usagePart = renderWindow('Usage', primaryPercent, snapshot.ratePrimary.resetsAt);
+    let usagePart = renderWindow('Usage', primaryPercent, snapshot.ratePrimary.resetsAt, snapshot.ratePrimary.windowMinutes);
 
-    if (snapshot.rateSecondary && Math.round(snapshot.rateSecondary.usedPercent) >= config.sevenDayThreshold
-        && itemEnabled(snapshot, 'weekly-limit')) {
+    if (snapshot.rateSecondary && itemEnabled(snapshot, 'weekly-limit')) {
       const secondaryPercent = Math.round(snapshot.rateSecondary.usedPercent);
-      usagePart += ` | ${renderWindow('', secondaryPercent, snapshot.rateSecondary.resetsAt).trim()}`;
+      const meetsThreshold = secondaryPercent >= config.sevenDayThreshold;
+      const wideEnough = detectStatusWidth() >= 140;
+      if (meetsThreshold || wideEnough) {
+        usagePart += ` | ${renderWindow('', secondaryPercent, snapshot.rateSecondary.resetsAt, snapshot.rateSecondary.windowMinutes).trim()}`;
+      }
     }
 
     parts.push(usagePart);
@@ -481,11 +509,14 @@ function buildCompactLine(snapshot: HudSnapshot, config: HudConfig): string {
     const primaryRemain = formatRemaining(snapshot.ratePrimary.resetsAt);
     extra.push(`${dim('U5')} ${colorPercent(primaryPercent, `${primaryPercent}%`)}${primaryRemain ? ` ${dim(primaryRemain)}` : ''}`);
   }
-  if (snapshot.rateSecondary && Math.round(snapshot.rateSecondary.usedPercent) >= config.sevenDayThreshold
-      && itemEnabled(snapshot, 'weekly-limit')) {
+  if (snapshot.rateSecondary && itemEnabled(snapshot, 'weekly-limit')) {
     const secondaryPercent = Math.round(snapshot.rateSecondary.usedPercent);
-    const secondaryRemain = formatRemaining(snapshot.rateSecondary.resetsAt);
-    extra.push(`${dim('U7')} ${colorPercent(secondaryPercent, `${secondaryPercent}%`)}${secondaryRemain ? ` ${dim(secondaryRemain)}` : ''}`);
+    const meetsThreshold = secondaryPercent >= config.sevenDayThreshold;
+    const wideEnough = detectStatusWidth() >= 140;
+    if (meetsThreshold || wideEnough) {
+      const secondaryRemain = formatRemaining(snapshot.rateSecondary.resetsAt);
+      extra.push(`${dim('U7')} ${colorPercent(secondaryPercent, `${secondaryPercent}%`)}${secondaryRemain ? ` ${dim(secondaryRemain)}` : ''}`);
+    }
   }
   // Merge extra metrics into the left side, then assemble with badges.
   const leftWithExtra = extra.length > 0

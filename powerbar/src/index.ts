@@ -120,11 +120,13 @@ async function tick(args: CliArgs): Promise<number> {
 
   const sessionId = args.sessionId ?? process.env.POWERBAR_SESSION_ID ?? process.env.CODEX_SESSION_ID;
   const cwdHint = args.cwdHint ?? process.env.POWERBAR_CWD ?? process.cwd();
+  // When a session ID is known, only use that session's rollout — never fall
+  // back to an older session's file which would show stale compacts/tools.
   const rolloutPath = args.rolloutPath
     ?? process.env.POWERBAR_ROLLOUT_PATH
     ?? (sessionId ? await findRolloutForSession(sessionId, args.codexHome, cwdHint) : null)
-    ?? (cwdHint ? await findLatestRolloutForCwd(cwdHint, args.codexHome) : null)
-    ?? await findLatestRollout(args.codexHome);
+    ?? (!sessionId && cwdHint ? await findLatestRolloutForCwd(cwdHint, args.codexHome) : null)
+    ?? (!sessionId ? await findLatestRollout(args.codexHome) : null);
 
   const envSnapshot = await buildSnapshotFromEnv();
   const snapshot = rolloutPath

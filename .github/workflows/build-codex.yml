@@ -36,6 +36,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   HUD_DIR: powerbar
   CODEX_UPSTREAM: https://github.com/openai/codex.git
   PATCH_FILE: powerbar/patches/codex-statusline-command.patch
@@ -52,7 +53,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: powerbar/package-lock.json
 
@@ -73,9 +74,10 @@ jobs:
           - os: macos-14
             target: aarch64-apple-darwin
             asset: codex-darwin-arm64.tar.gz
-          - os: macos-13
+          - os: macos-15
             target: x86_64-apple-darwin
             asset: codex-darwin-x86_64.tar.gz
+            cross: true
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             asset: codex-linux-x86_64.tar.gz
@@ -113,6 +115,8 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.cross && matrix.target || '' }}
 
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
@@ -161,12 +165,28 @@ jobs:
             echo "Building with fast profile (thin LTO, parallel codegen)"
           fi
 
-          cargo build --locked --release -p codex-cli
-          ls -lh target/release/codex
+          target_flag=""
+          if [[ "${{ matrix.cross }}" == "true" ]]; then
+            target_flag="--target ${{ matrix.target }}"
+          fi
+
+          cargo build --locked --release -p codex-cli $target_flag
+
+          if [[ "${{ matrix.cross }}" == "true" ]]; then
+            ls -lh "target/${{ matrix.target }}/release/codex"
+          else
+            ls -lh target/release/codex
+          fi
 
       - name: Package binary
         run: |
-          cd codex-upstream/codex-rs/target/release
+          if [[ "${{ matrix.cross }}" == "true" ]]; then
+            bin_dir="codex-upstream/codex-rs/target/${{ matrix.target }}/release"
+          else
+            bin_dir="codex-upstream/codex-rs/target/release"
+          fi
+
+          cd "$bin_dir"
           tar czf "$GITHUB_WORKSPACE/${{ matrix.asset }}" codex
           echo "Packaged: ${{ matrix.asset }}"
           ls -lh "$GITHUB_WORKSPACE/${{ matrix.asset }}"
@@ -181,7 +201,7 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/master'
 
     steps:
       - name: Download all artifacts
@@ -193,8 +213,21 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          tag="${GITHUB_REF_NAME}"
-          version="${tag#codex-}"
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            tag="${GITHUB_REF_NAME}"
+            version="${tag#codex-}"
+            prerelease=""
+          else
+            # For master pushes, create a rolling pre-release
+            tag="latest"
+            version="latest (${GITHUB_SHA::8})"
+            prerelease="--prerelease"
+
+            # Delete existing 'latest' release if present so we can recreate it
+            gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes 2>/dev/null || true
+            git tag -d "$tag" 2>/dev/null || true
+            gh api "repos/$GITHUB_REPOSITORY/git/refs/tags/$tag" -X DELETE 2>/dev/null || true
+          fi
 
           # Collect all .tar.gz files
           files=()
@@ -205,8 +238,9 @@ jobs:
           gh release create "$tag" "${files[@]}" \
             --repo "$GITHUB_REPOSITORY" \
             --title "Patched Codex $version" \
+            $prerelease \
             --notes "$(cat <<EOF
-          Patched Codex binary built from upstream [$version](https://github.com/openai/codex/releases/tag/$version) with HUD status-line integration.
+          Patched Codex binary built from upstream with HUD status-line integration.
 
           ## Assets
           | Platform | Architecture | Asset |

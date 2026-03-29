@@ -28,20 +28,20 @@ fatal() {
 
 print_usage() {
   cat <<'USAGE'
-Usage: ./install.sh [--full] [--fast] [--source] [--uninstall] [--help]
+Usage: ./install.sh [--full] [--source] [--fast] [--uninstall] [--help]
 
 Modes:
   default            Interactive guided setup (recommended)
-  --full             One-shot full install without prompts
-  --fast             Use faster Rust build profile (thin LTO, parallel codegen)
-  --source           Skip prebuilt binary download, always build from source
+  --full             One-shot full install (prebuilt binary, no prompts)
+  --source           Build patched codex from source instead of downloading
+  --fast             Use faster Rust build profile (thin LTO, only with --source)
   --uninstall        Remove patched codex binary, restore config, clean PATH entries
 
 Interactive choices:
-  1. Full install                 Build HUD, patch/build Codex, update config
-  2. Build HUD only               Rebuild local dist/
-  3. Build HUD + update config    Rebuild HUD and wire status_line_command
-  4. Patch/build Codex only       Rebuild patched codex binary
+  1. Full install (prebuilt)      Download prebuilt binary + build HUD + configure
+  2. Full install (from source)   Build codex from source + build HUD + configure
+  3. Build HUD only               Rebuild powerbar dist/
+  4. Build HUD + update config    Rebuild HUD and wire status_line_command
 USAGE
 }
 
@@ -414,18 +414,12 @@ build_hud() {
 install_powerbar_cli() {
   ensure_command node "node is required to run powerbar"
 
-  local bin_dir="$HOME/.local/bin"
-  local target="$bin_dir/powerbar"
-  mkdir -p "$bin_dir"
-
-  cat > "$target" <<EOF
-#!/usr/bin/env bash
-exec node "$REPO_DIR/dist/index.js" "\$@"
-EOF
-  chmod +x "$target"
-
-  ensure_local_bin_precedence
-  print_step "Installed powerbar CLI to $target"
+  # Copy built dist to a stable location so powerbar works even if the
+  # repo is moved or deleted.
+  local install_dir="$HOME/.powerbar/dist"
+  mkdir -p "$install_dir"
+  cp -R "$REPO_DIR/dist/"* "$install_dir/"
+  print_step "Installed powerbar runtime to $install_dir"
 }
 
 configure_codex() {
@@ -625,22 +619,22 @@ interactive_setup() {
 
   print_step "Interactive setup"
   echo "Choose install mode:"
-  echo "  1) Full install     — patches Codex binary (requires Rust, ~10-20 min first build)"
-  echo "  2) Build HUD only"
-  echo "  3) Build HUD + update Codex config"
-  echo "  4) Patch/build patched Codex only"
+  echo "  1) Full install (prebuilt)    — download prebuilt binary + build HUD + configure (recommended)"
+  echo "  2) Full install (from source) — build codex from source (requires Rust, ~10-20 min)"
+  echo "  3) Build HUD only"
+  echo "  4) Build HUD + update Codex config"
 
   local choice
   choice="$(prompt_with_default "Select mode" "1")"
   case "$choice" in
-    1) ACTION="full" ;;
-    2) ACTION="hud-only" ;;
-    3) ACTION="hud-config" ;;
-    4) ACTION="codex-only" ;;
+    1) ACTION="full" ; FORCE_SOURCE_BUILD=0 ;;
+    2) ACTION="full" ; FORCE_SOURCE_BUILD=1 ;;
+    3) ACTION="hud-only" ;;
+    4) ACTION="hud-config" ;;
     *) fatal "Unknown interactive selection: $choice" ;;
   esac
 
-  if [[ "$ACTION" == "full" || "$ACTION" == "codex-only" ]]; then
+  if [[ "$ACTION" == "full" && "$FORCE_SOURCE_BUILD" -eq 1 ]]; then
     local detected=""
     if detected="$(find_codex_repo 2>/dev/null)"; then
       echo "[install] Detected Codex source: $detected"
@@ -658,16 +652,17 @@ interactive_setup() {
   print_step "Summary"
   case "$ACTION" in
     full)
-      echo "[install] Will build powerbar, configure ~/.codex/config.toml, patch Codex, and install patched codex"
+      if [[ "$FORCE_SOURCE_BUILD" -eq 1 ]]; then
+        echo "[install] Will build powerbar, configure config.toml, build codex from source"
+      else
+        echo "[install] Will build powerbar, configure config.toml, download prebuilt codex"
+      fi
       ;;
     hud-only)
       echo "[install] Will build powerbar only"
       ;;
     hud-config)
       echo "[install] Will build powerbar and update ~/.codex/config.toml"
-      ;;
-    codex-only)
-      echo "[install] Will patch/build/install patched codex"
       ;;
   esac
   if [[ -n "$CODEX_REPO_OVERRIDE" ]]; then
@@ -840,11 +835,17 @@ uninstall() {
     fi
   done
 
-  # 3b. Remove powerbar CLI wrapper.
+  # 3b. Remove powerbar CLI wrapper (legacy).
   local powerbar_bin="$HOME/.local/bin/powerbar"
   if [[ -f "$powerbar_bin" ]]; then
     rm -f "$powerbar_bin"
     echo "  Removed powerbar wrapper: $powerbar_bin"
+  fi
+
+  # 3c. Remove powerbar runtime.
+  if [[ -d "$HOME/.powerbar/dist" ]]; then
+    rm -rf "$HOME/.powerbar/dist"
+    echo "  Removed powerbar runtime: $HOME/.powerbar/dist"
   fi
 
   # 4. Remove status_line_command from config.toml
@@ -949,7 +950,7 @@ main() {
     install_powerbar_cli
     print_step "Done"
     echo "HUD rebuilt at: $REPO_DIR/dist/index.js"
-    echo "Powerbar installed at: $HOME/.local/bin/powerbar"
+    echo "Powerbar runtime installed at: $HOME/.powerbar/dist/"
     return 0
   fi
 
@@ -959,7 +960,7 @@ main() {
     configure_codex
     print_step "Done"
     echo "HUD rebuilt at: $REPO_DIR/dist/index.js"
-    echo "Powerbar installed at: $HOME/.local/bin/powerbar"
+    echo "Powerbar runtime installed at: $HOME/.powerbar/dist/"
     echo "HUD command wired in ~/.codex/config.toml via [tui].status_line_command"
     return 0
   fi
@@ -974,7 +975,7 @@ main() {
     verify_installed_codex
     print_step "Done"
     echo "Patched codex installed at: $INSTALL_BIN_DIR/codex (prebuilt)"
-  else
+  elif [[ "$FORCE_SOURCE_BUILD" -eq 1 ]]; then
     local codex_repo
     codex_repo="$(ensure_codex_repo "$CODEX_REPO_OVERRIDE")"
     print_step "Using Codex source: $codex_repo"
@@ -985,13 +986,14 @@ main() {
 
     print_step "Done"
     echo "Patched codex installed at: $INSTALL_BIN_DIR/codex (built from source)"
+  else
+    fatal "Prebuilt binary not available for this platform. Rerun with --source to build from source."
   fi
+
   if [[ "$ACTION" == "full" ]]; then
     echo "Run Codex normally: codex"
-    echo "Run Powerbar directly: powerbar"
+    echo "Powerbar is invoked automatically by Codex via status_line_command"
     echo "HUD command wired in ~/.codex/config.toml via [tui].status_line_command"
-  else
-    echo "Re-run ./install.sh or ./install.sh --interactive to build/configure the HUD if needed"
   fi
 
   maybe_star_repo
