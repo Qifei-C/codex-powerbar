@@ -869,8 +869,14 @@ uninstall() {
       continue
     fi
     if grep -Fq "$marker_start" "$rc"; then
-      sed -i.bak "/$marker_start/,/$marker_end/d" "$rc"
-      rm -f "${rc}.bak"
+      local tmp
+      tmp="$(mktemp)"
+      awk -v ms="$marker_start" -v me="$marker_end" '
+        $0 == ms { skip=1; next }
+        $0 == me { skip=0; next }
+        !skip { print }
+      ' "$rc" > "$tmp"
+      mv "$tmp" "$rc"
       echo "  Removed PATH entry from $rc"
     fi
   done
@@ -882,18 +888,21 @@ uninstall() {
     echo "  Removed powerbar wrapper: $powerbar_bin"
   fi
 
-  # 3c. Remove powerbar runtime.
-  if [[ -d "$HOME/.powerbar/dist" ]]; then
-    rm -rf "$HOME/.powerbar/dist"
-    echo "  Removed powerbar runtime: $HOME/.powerbar/dist"
+  # 3c. Remove powerbar runtime and data.
+  if [[ -d "$HOME/.powerbar" ]]; then
+    # Keep vendor/ for now — it's handled separately in step 7.
+    find "$HOME/.powerbar" -mindepth 1 -maxdepth 1 ! -name vendor -exec rm -rf {} +
+    echo "  Removed powerbar runtime: $HOME/.powerbar"
   fi
 
-  # 4. Remove status_line_command from config.toml
+  # 4. Remove status_line_command and status_line from config.toml
   local config="$HOME/.codex/config.toml"
-  if [[ -f "$config" ]] && grep -q "status_line_command" "$config"; then
-    sed -i.bak '/^status_line_command[[:space:]]*=/d' "$config"
-    rm -f "${config}.bak"
-    echo "  Removed status_line_command from $config"
+  if [[ -f "$config" ]] && grep -qE '(status_line_command|status_line)[[:space:]]*=' "$config"; then
+    local tmp
+    tmp="$(mktemp)"
+    grep -vE '^[[:space:]]*(status_line_command|status_line)[[:space:]]*=' "$config" > "$tmp"
+    mv "$tmp" "$config"
+    echo "  Removed status_line entries from $config"
   fi
 
   # 5. Clean legacy tmux config
@@ -932,6 +941,11 @@ uninstall() {
       rm -rf "$vendor"
       echo "  Removed $vendor"
     fi
+  fi
+
+  # Clean up ~/.powerbar if it's now empty (vendor was the last thing in it).
+  if [[ -d "$HOME/.powerbar" ]] && [[ -z "$(ls -A "$HOME/.powerbar" 2>/dev/null)" ]]; then
+    rmdir "$HOME/.powerbar"
   fi
 
   print_step "Uninstall complete"
@@ -991,6 +1005,7 @@ main() {
     print_step "Done"
     echo "HUD rebuilt at: $REPO_DIR/dist/index.js"
     echo "Powerbar runtime installed at: $HOME/.powerbar/dist/"
+    maybe_star_repo
     return 0
   fi
 
@@ -1002,6 +1017,7 @@ main() {
     echo "HUD rebuilt at: $REPO_DIR/dist/index.js"
     echo "Powerbar runtime installed at: $HOME/.powerbar/dist/"
     echo "HUD command wired in ~/.codex/config.toml via [tui].status_line_command"
+    maybe_star_repo
     return 0
   fi
 

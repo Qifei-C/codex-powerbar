@@ -473,6 +473,12 @@ export function parseIncremental(state: ParserState): void {
 function parseResetDate(raw?: string): Date | undefined {
   if (!raw) return undefined;
 
+  // Try as a Unix timestamp in seconds (e.g. "1774826242" from the Rust env var).
+  const asNum = Number(raw);
+  if (!Number.isNaN(asNum) && asNum > 1_000_000_000 && asNum < 1e11) {
+    return new Date(asNum * 1000);
+  }
+
   // Try ISO 8601 or epoch millis first.
   const d = new Date(raw);
   if (!Number.isNaN(d.getTime())) return d;

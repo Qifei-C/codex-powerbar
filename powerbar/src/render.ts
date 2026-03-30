@@ -223,11 +223,19 @@ function summarizeTools(snapshot: HudSnapshot): string | null {
   }
 
   if (groups.size === 0) return null;
+
+  const totalCount = recent.length;
+  const hasFailed = Array.from(groups.values()).some((g) => g.status === 'failed');
+  const hasRunning = snapshot.activeTools.length > 0;
+
+  const idle = snapshot.turnState === 'idle' && !hasRunning;
+
   return Array.from(groups.entries())
     .sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0]))
     .slice(0, 4)
     .map(([bucket, info]) => {
-      const targetSuffix = info.lastTarget ? `: ${info.lastTarget}` : '';
+      // When idle, drop target details to reduce noise.
+      const targetSuffix = !idle && info.lastTarget ? `: ${info.lastTarget}` : '';
       return `${toolPrefix(info.status)} ${dim(`${bucket}${targetSuffix} ×${info.count}`)}`;
     })
     .join(dim(' | '));
@@ -248,7 +256,7 @@ function renderPlan(snapshot: HudSnapshot): string | null {
   const active = running ?? pending;
   const icon = running ? yellow('◐') : '▸';
 
-  return `${icon} ${dim(`${completed}/${total}`)}${active?.step ? dim(` ${active.step}`) : ''}`;
+  return `${icon} ${dim(`${completed}/${total}`)}${active?.step ? ` ${dim(active.step)}` : ''}`;
 }
 
 /** Header split into left content and optional right-aligned badges. */

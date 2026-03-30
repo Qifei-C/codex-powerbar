@@ -8,11 +8,11 @@ index 082965b..b41b6f4 100644
      let color_enabled = supports_color::on(Stream::Stdout).is_some();
 -    for line in format_exit_messages(exit_info, color_enabled) {
 +    let messages = format_exit_messages(exit_info, color_enabled);
-+    if !messages.is_empty() {
-+        // Ensure the cursor starts at column 0 after the inline viewport exits;
-+        // a multi-line footer can leave it at a non-zero column.
-+        print!("\r");
-+    }
++    // Ensure the cursor starts at column 0 after the inline viewport exits;
++    // a multi-line footer can leave it at a non-zero column even when there
++    // are no exit messages to print.
++    print!("\r");
++    // Then print any post-exit notices.
 +    for line in messages {
          println!("{line}");
      }
