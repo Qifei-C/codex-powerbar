@@ -1,54 +1,91 @@
 # Powerbar
 
-Powerbar is a HUD for Codex CLI. It is built for the footer/status-line use case: keep the high-value state visible without leaving the terminal.
+Powerbar is a footer HUD for Codex CLI.
 
-It combines:
+It is built around the `status_line_command` path: keep the high-signal session state visible in the footer, with enough density to be useful during long coding sessions.
 
-- Codex status-line env data for the most current usage percentages
-- rollout JSONL parsing for richer session context, tool history, plan content, and reset-time backfill
-- a patched `codex` binary plus `status_line_command` wiring so the HUD is always present in active sessions
+![Powerbar full terminal capture](docs/assets/terminal-full.png)
 
-![Powerbar screenshot](docs/assets/hud-example.png)
+## What It Is
+
+Powerbar combines three things:
+
+- a patched `codex` binary that can execute an external status-line command
+- a Node and TypeScript HUD renderer installed at `~/.powerbar/dist`
+- a field-by-field merge between live Codex env data and rollout JSONL session history
+
+The result is a footer that stays lightweight but carries much more operational detail than the default Codex footer.
 
 ## What The HUD Shows
 
-- active model and reasoning effort
-- current project and Git branch
-- context usage and context window size
-- 5-hour and 7-day usage windows, with reset time when available
-- current plan step
-- recent / active tool activity summarized into buckets like `Read`, `Edit`, `Grep`, `Bash`
-- approval mode, sandbox mode, and selected environment details
-- compact count, feature badges, and optional session metadata
+- model, reasoning effort, fast mode, and optional CLI version
+- current project and Git branch, with dirty or ahead or behind indicators
+- context usage in percent and tokens
+- 5-hour and 7-day rate windows, with concrete reset times when available
+- approval policy, sandbox mode, collaboration details, and environment badges
+- current plan step plus recent and active tool work
 
-The current expanded layout is optimized for the Codex footer constraint:
+## Real Terminal Captures
+
+Footer density in a real session:
+
+![Powerbar plan and tools capture](docs/assets/terminal-plan-tools.png)
+
+Less-detail view with a tighter footer:
+
+![Powerbar less details capture](docs/assets/terminal-less-details.png)
+
+Structural visual for the product page:
+
+![Powerbar hero](docs/assets/powerbar-hero.svg)
+
+## Footer Anatomy
+
+The current expanded layout is designed around four rows:
 
 1. header
-2. context + rate windows
+2. context plus rate windows
 3. environment
 4. `plan | tools`
 
-## How Data Priority Works
+Typical output looks like:
 
-Powerbar does not trust a single source blindly.
+```text
+[g5.4 | High | SPD] | codex-hud/codex-powerbar git:(master* ↑2)
+Context 55% 141k/258k | Usage 6% (resets 6:52 PM) | U7 24% (resets Thu 9:55 PM)
+Approvals: Manual | Sandbox: workspace-write | Agents: 0 | MCP: 0
+◐ 1/3 Fix weekly reset fallback | ✓ Read x7 | ✓ Edit x5 | ✓ Bash x4
+```
 
-- usage percentages come from live Codex env vars when present
-- reset times and rate window lengths are merged field-by-field so rollout data can fill gaps when env only provides percentages
-- plan text comes from rollout when env only exposes plan counts
-- tool summaries come from rollout events
+The compact preset compresses the same data into a single status line when space is tight.
 
-This is deliberate: the merged snapshot is more accurate than rollout-only, and more complete than env-only.
+## How The Data Merge Works
+
+![Powerbar flow](docs/assets/powerbar-flow.svg)
+
+Powerbar uses two data sources because neither is good enough on its own.
+
+- live env data is the freshest source for current percentages and runtime selections
+- rollout JSONL is the richer source for reset timestamps, plan text, tool history, and session identity
+
+Merge rules are deliberate:
+
+- env percentages win when the env vars are actually present
+- rollout reset timestamps backfill missing env reset data
+- rollout plan labels beat placeholder progress-only env data
+- tool summaries remain rollout-backed
+
+That merge is why Powerbar can show concrete 5h and 7d reset times even when Codex only exports percent and window length in the live footer env.
 
 ## Install
+
+Before running the installer, quit all active `codex` sessions. The installer refuses to mutate the binary or config while Codex is running.
 
 ### Guided install
 
 ```bash
 ./install.sh
 ```
-
-This is the default interactive flow.
-The installer refuses to run while any Codex session is active, so exit all `codex` processes first.
 
 ### Non-interactive install
 
@@ -76,12 +113,12 @@ The installer refuses to run while any Codex session is active, so exit all `cod
 
 ## What The Installer Does
 
-`install.sh` is responsible for the full local setup:
+`install.sh` performs the full local setup:
 
 - builds the HUD with `npm ci` and `npm run build`
 - installs the runtime to `~/.powerbar/dist`
-- configures `~/.codex/config.toml` with `status_line_command`
-- installs a patched `codex` binary to `~/.local/bin/codex`
+- writes `status_line_command` into `~/.codex/config.toml`
+- installs a patched `codex` binary
 - prefers a GitHub prebuilt binary when one exists for the platform
 - falls back to source build when prebuilt assets are unavailable
 
@@ -89,8 +126,8 @@ The installer refuses to run while any Codex session is active, so exit all `cod
 
 ### Prebuilt patched binaries
 
-- macOS Apple Silicon (`codex-darwin-arm64.tar.gz`)
-- Linux x86_64 (`codex-linux-x86_64.tar.gz`)
+- macOS Apple Silicon: `codex-darwin-arm64.tar.gz`
+- Linux x86_64: `codex-linux-x86_64.tar.gz`
 
 ### Source-build fallback
 
@@ -169,7 +206,7 @@ Example:
 - `lineLayout`: `compact` or `expanded`
 - `showTools`: enable tool summary row content
 - `showPlan`: enable plan row content
-- `showEnvironment`: show approval/sandbox/environment info
+- `showEnvironment`: show approval and sandbox and environment info
 - `contextDisplay`: `percent`, `tokens`, `both`, or `remaining`
 - `sevenDayThreshold`: controls when the 7-day bar appears in tighter layouts
 
@@ -177,36 +214,13 @@ Example:
 
 The installer writes a `status_line_command` entry into `~/.codex/config.toml`.
 
-Powerbar also respects Codex-provided status-line item filtering through:
+Powerbar also respects Codex-provided footer item filtering through:
 
 ```text
 CODEX_STATUS_LINE_ITEMS
 ```
 
-That means Codex-native footer selection still works, while Powerbar keeps HUD-only extras such as plan and tool summaries.
-
-## Release And Build Workflow
-
-The repository root owns CI and release automation.
-
-- `master` pushes run lightweight HUD CI through `../.github/workflows/hud-tests.yml`
-- patched binary builds on `master` only run when `../.github/workflows/build-codex.yml`, `patches/`, or `install.sh` change
-- `workflow_dispatch` refreshes the rolling `latest` pre-release explicitly
-- `codex-v*` tags produce versioned releases
-
-The current workflow publishes:
-
-- `codex-darwin-arm64.tar.gz`
-- `codex-linux-x86_64.tar.gz`
-
-## Repository Layout
-
-- `src/`: parser, merger, renderer, overview, self-check
-- `tests/`: Node test suite
-- `scripts/`: config and patch helper scripts
-- `patches/`: Codex patch set
-- `docs/`: screenshots, analysis, launch copy
-- `install.sh`: installer / updater / uninstall entry point
+Codex-native item selection still works. Powerbar keeps HUD-only additions such as plan and tool summaries around those native selections.
 
 ## Troubleshooting
 
@@ -218,23 +232,32 @@ The current workflow publishes:
 
 ### Usage percentages look stale
 
-- Powerbar prefers live env percentages, so stale values usually mean the session itself is not exporting fresh status-line data
+- Powerbar prefers live env percentages, so stale values usually mean the session itself is not exporting fresh footer env data
 - verify you are on a patched `codex` from `~/.local/bin/codex`
 
 ### Reset time is missing
 
 - this means neither env nor rollout provided a usable reset timestamp for that window
-- Powerbar will still show the window length as a fallback
+- Powerbar falls back to showing the raw window length instead of inventing a time
 
 ### Tool summaries are missing
 
 - tool summaries come from rollout events, not just env counters
-- make sure the active session is writing rollout JSONL and that Powerbar is resolving the correct session
+- confirm the active session is writing rollout JSONL and that Powerbar resolved the correct session id
 
 ### Intel macOS install downloads fail
 
 - expected: Intel macOS no longer has a prebuilt release asset
 - use `./install.sh --source`
+
+## Repository Layout
+
+- `src/`: parser, merger, renderer, overview, self-check
+- `tests/`: Node test suite
+- `scripts/`: config and patch helper scripts
+- `patches/`: Codex patch set
+- `docs/`: screenshots, diagrams, launch copy
+- `install.sh`: installer and updater and uninstall entry point
 
 ## Contributing
 

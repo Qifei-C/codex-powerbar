@@ -14,9 +14,12 @@ FAST_BUILD=0
 REFERENCE_CODEX_VERSION=""
 PREBUILT_RELEASE_REPO="Qifei-C/codex-powerbar"
 PREBUILT_RELEASE_TAG="codex-v0.117.0"
-SOURCE_BUILD_CODEX_REF="main"
+# Keep source builds pinned to the stable upstream release that the patch file targets.
+SOURCE_BUILD_CODEX_REF="rust-v0.117.0"
 FORCE_SOURCE_BUILD=0
 FORCE_UPDATE=0
+REPAIR_INSTALL=0
+INSTALL_MUTATED=0
 POWERBAR_STATE_DIR="$HOME/.powerbar"
 POWERBAR_RUNTIME_DIR="$POWERBAR_STATE_DIR/dist"
 POWERBAR_MANIFEST_PATH="$POWERBAR_STATE_DIR/manifest.json"
@@ -85,7 +88,7 @@ ensure_codex_not_running() {
 
 print_usage() {
   cat <<'USAGE'
-Usage: ./install.sh [--full] [--source] [--fast] [--uninstall] [--help]
+Usage: ./install.sh [--full] [--source] [--fast] [--force] [--repair] [--uninstall] [--help]
 
 Modes:
   default            Interactive guided setup (recommended)
@@ -93,6 +96,7 @@ Modes:
   --source           Build patched codex from source instead of downloading
   --fast             Use faster Rust build profile (thin LTO, only with --source)
   --force            Rebuild/reinstall all managed components even if unchanged
+  --repair           Full repair reinstall of all managed components (useful after a broken install)
   --uninstall        Remove patched codex binary, restore config, clean PATH entries
 
 Interactive choices:
@@ -100,6 +104,7 @@ Interactive choices:
   2. Full install (from source)   Build codex from source + build HUD + configure
   3. Build HUD only               Rebuild powerbar dist/
   4. Build HUD + update config    Rebuild HUD and wire status_line_command
+  5. Repair install               Reinstall powerbar, config, and patched codex from scratch
 USAGE
 }
 
@@ -366,6 +371,14 @@ except Exception:
 PY
 }
 
+manifest_is_current() {
+  local powerbar_version="$1"
+  local codex_patch_version="$2"
+  [[ -f "$POWERBAR_MANIFEST_PATH" ]] || return 1
+  [[ "$(read_manifest_field powerbarVersion)" == "$powerbar_version" ]] || return 1
+  [[ "$(read_manifest_field codexPatchVersion)" == "$codex_patch_version" ]]
+}
+
 write_manifest() {
   local powerbar_version="$1"
   local codex_patch_version="$2"
@@ -390,6 +403,18 @@ with open(tmp_path, 'w', encoding='utf8') as handle:
     handle.write('\n')
 os.replace(tmp_path, manifest_path)
 PY
+}
+
+ensure_manifest() {
+  local powerbar_version="$1"
+  local codex_patch_version="$2"
+
+  if [[ "$FORCE_UPDATE" -eq 0 ]] && manifest_is_current "$powerbar_version" "$codex_patch_version"; then
+    return 1
+  fi
+
+  write_manifest "$powerbar_version" "$codex_patch_version"
+  return 0
 }
 
 powerbar_runtime_is_current() {
@@ -532,15 +557,24 @@ ensure_codex_repo() {
 
   if [[ -n "$preferred" ]]; then
     if is_codex_repo "$preferred"; then
-      echo "$preferred"
+      if [[ "$REPAIR_INSTALL" -eq 1 ]] && is_managed_vendor_repo "$preferred"; then
+        refresh_managed_vendor_repo "$preferred"
+      else
+        echo "$preferred"
+      fi
       return 0
     fi
     clone_codex_repo "$preferred"
     return 0
   fi
 
-  if find_codex_repo >/dev/null 2>&1; then
-    find_codex_repo
+  local detected
+  if detected="$(find_codex_repo 2>/dev/null)"; then
+    if [[ "$REPAIR_INSTALL" -eq 1 ]] && is_managed_vendor_repo "$detected"; then
+      refresh_managed_vendor_repo "$detected"
+    else
+      echo "$detected"
+    fi
     return 0
   fi
 
@@ -608,6 +642,7 @@ install_powerbar_cli() {
   # repo is moved or deleted.
   local install_dir="$HOME/.powerbar/dist"
   mkdir -p "$install_dir"
+  find "$install_dir" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
   cp -R "$REPO_DIR/dist/"* "$install_dir/"
   print_step "Installed powerbar runtime to $install_dir"
 }
@@ -853,6 +888,7 @@ interactive_setup() {
   echo "  2) Full install (from source) — build codex from source (requires Rust, ~10-20 min)"
   echo "  3) Build HUD only"
   echo "  4) Build HUD + update Codex config"
+  echo "  5) Repair install             — full reinstall of all managed components"
 
   local choice
   choice="$(prompt_with_default "Select mode" "1")"
@@ -861,6 +897,7 @@ interactive_setup() {
     2) ACTION="full" ; FORCE_SOURCE_BUILD=1 ;;
     3) ACTION="hud-only" ;;
     4) ACTION="hud-config" ;;
+    5) ACTION="full" ; FORCE_SOURCE_BUILD=0 ; FORCE_UPDATE=1 ; REPAIR_INSTALL=1 ;;
     *) fatal "Unknown interactive selection: $choice" ;;
   esac
 
@@ -882,7 +919,9 @@ interactive_setup() {
   print_step "Summary"
   case "$ACTION" in
     full)
-      if [[ "$FORCE_SOURCE_BUILD" -eq 1 ]]; then
+      if [[ "$REPAIR_INSTALL" -eq 1 ]]; then
+        echo "[install] Will fully reinstall powerbar, refresh config.toml, and reinstall patched codex"
+      elif [[ "$FORCE_SOURCE_BUILD" -eq 1 ]]; then
         echo "[install] Will build powerbar, configure config.toml, build codex from source"
       else
         echo "[install] Will build powerbar, configure config.toml, download prebuilt codex"
@@ -922,6 +961,13 @@ parse_args() {
         ;;
       --force)
         FORCE_UPDATE=1
+        shift
+        ;;
+      --repair)
+        ACTION="full"
+        INTERACTIVE=0
+        FORCE_UPDATE=1
+        REPAIR_INSTALL=1
         shift
         ;;
       --uninstall)
@@ -999,7 +1045,7 @@ detect_existing_codex() {
   echo "  To restore later, run: ./install.sh --uninstall"
   echo ""
 
-  if [[ -t 0 && -t 1 ]]; then
+  if [[ "$INTERACTIVE" -eq 1 && -t 0 && -t 1 ]]; then
     if ! confirm_prompt "Continue with install?" "Y"; then
       echo "[install] Cancelled"
       exit 0
@@ -1148,6 +1194,9 @@ uninstall() {
 
 maybe_star_repo() {
   local repo="Qifei-C/codex-powerbar"
+  [[ "$INTERACTIVE" -eq 1 ]] || return 0
+  [[ "$INSTALL_MUTATED" -eq 1 ]] || return 0
+  [[ -t 0 && -t 1 ]] || return 0
   if ! command -v gh >/dev/null 2>&1; then
     return 0
   fi
@@ -1156,9 +1205,6 @@ maybe_star_repo() {
   fi
   # Skip if already starred
   if gh api "/user/starred/$repo" --silent >/dev/null 2>&1; then
-    return 0
-  fi
-  if [[ ! -t 0 || ! -t 1 ]]; then
     return 0
   fi
   echo ""
@@ -1186,6 +1232,8 @@ main() {
 
   if [[ "$INTERACTIVE" -eq 1 ]]; then
     print_step "Starting interactive setup"
+  elif [[ "$REPAIR_INSTALL" -eq 1 ]]; then
+    print_step "Starting repair install"
   else
     print_step "Starting full install"
   fi
@@ -1211,8 +1259,10 @@ main() {
   fi
 
   if [[ "$ACTION" == "hud-only" ]]; then
-    ensure_powerbar_runtime "$repo_powerbar_version" || true
-    write_manifest "$repo_powerbar_version" "$manifest_codex_patch_version"
+    if ensure_powerbar_runtime "$repo_powerbar_version"; then
+      INSTALL_MUTATED=1
+    fi
+    ensure_manifest "$repo_powerbar_version" "$manifest_codex_patch_version" || true
     print_step "Done"
     echo "HUD available at: $REPO_DIR/dist/index.js"
     echo "Powerbar runtime available at: $POWERBAR_RUNTIME_DIR/"
@@ -1221,9 +1271,13 @@ main() {
   fi
 
   if [[ "$ACTION" == "hud-config" ]]; then
-    ensure_powerbar_runtime "$repo_powerbar_version" || true
-    ensure_codex_config || true
-    write_manifest "$repo_powerbar_version" "$manifest_codex_patch_version"
+    if ensure_powerbar_runtime "$repo_powerbar_version"; then
+      INSTALL_MUTATED=1
+    fi
+    if ensure_codex_config; then
+      INSTALL_MUTATED=1
+    fi
+    ensure_manifest "$repo_powerbar_version" "$manifest_codex_patch_version" || true
     print_step "Done"
     echo "HUD available at: $REPO_DIR/dist/index.js"
     echo "Powerbar runtime available at: $POWERBAR_RUNTIME_DIR/"
@@ -1233,10 +1287,16 @@ main() {
   fi
 
   if [[ "$ACTION" == "full" ]]; then
-    ensure_powerbar_runtime "$repo_powerbar_version" || true
-    ensure_codex_config || true
-    ensure_codex_patch || true
-    write_manifest "$repo_powerbar_version" "$PREBUILT_RELEASE_TAG"
+    if ensure_powerbar_runtime "$repo_powerbar_version"; then
+      INSTALL_MUTATED=1
+    fi
+    if ensure_codex_config; then
+      INSTALL_MUTATED=1
+    fi
+    if ensure_codex_patch; then
+      INSTALL_MUTATED=1
+    fi
+    ensure_manifest "$repo_powerbar_version" "$PREBUILT_RELEASE_TAG" || true
     print_step "Done"
   fi
 

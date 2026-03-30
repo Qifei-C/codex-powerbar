@@ -1,0 +1,127 @@
+<svg width="1440" height="920" viewBox="0 0 1440 920" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="88" y1="72" x2="1358" y2="868" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#08131A"/>
+      <stop offset="0.52" stop-color="#10242F"/>
+      <stop offset="1" stop-color="#172E28"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="228" y1="150" x2="1220" y2="744" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0A1217" stop-opacity="0.96"/>
+      <stop offset="1" stop-color="#0E1A21" stop-opacity="0.92"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="254" y1="150" x2="1175" y2="150" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5EEAD4" stop-opacity="0.24"/>
+      <stop offset="0.45" stop-color="#F59E0B" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#93C5FD" stop-opacity="0.18"/>
+    </linearGradient>
+    <filter id="soft" x="-40" y="-40" width="1520" height="1000" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+    <filter id="cardShadow" x="160" y="100" width="1118" height="700" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feOffset dy="18"/>
+      <feGaussianBlur stdDeviation="22"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.0117647 0 0 0 0 0.0470588 0 0 0 0 0.0666667 0 0 0 0.42 0"/>
+    </filter>
+  </defs>
+
+  <rect width="1440" height="920" fill="#071017"/>
+  <rect x="44" y="44" width="1352" height="832" rx="38" fill="url(#bg)"/>
+
+  <g opacity="0.22">
+    <path d="M120 170H1320" stroke="#5EEAD4" stroke-width="1"/>
+    <path d="M120 248H1320" stroke="#5EEAD4" stroke-width="1"/>
+    <path d="M120 326H1320" stroke="#5EEAD4" stroke-width="1"/>
+    <path d="M120 404H1320" stroke="#5EEAD4" stroke-width="1"/>
+    <path d="M120 482H1320" stroke="#5EEAD4" stroke-width="1"/>
+    <path d="M120 560H1320" stroke="#5EEAD4" stroke-width="1"/>
+    <path d="M120 638H1320" stroke="#5EEAD4" stroke-width="1"/>
+    <path d="M120 716H1320" stroke="#5EEAD4" stroke-width="1"/>
+    <path d="M220 120V800" stroke="#5EEAD4" stroke-width="1"/>
+    <path d="M420 120V800" stroke="#5EEAD4" stroke-width="1"/>
+    <path d="M620 120V800" stroke="#5EEAD4" stroke-width="1"/>
+    <path d="M820 120V800" stroke="#5EEAD4" stroke-width="1"/>
+    <path d="M1020 120V800" stroke="#5EEAD4" stroke-width="1"/>
+    <path d="M1220 120V800" stroke="#5EEAD4" stroke-width="1"/>
+  </g>
+
+  <g filter="url(#soft)" opacity="0.75">
+    <circle cx="262" cy="188" r="102" fill="#0EA5A4"/>
+    <circle cx="1212" cy="248" r="112" fill="#F59E0B"/>
+    <circle cx="1104" cy="724" r="134" fill="#1D4ED8"/>
+  </g>
+
+  <text x="144" y="132" fill="#D6E8EE" font-family="Avenir Next, Segoe UI, sans-serif" font-size="22" font-weight="700" letter-spacing="2.4">POWERBAR</text>
+  <text x="144" y="178" fill="#F7FBFC" font-family="Avenir Next, Segoe UI, sans-serif" font-size="58" font-weight="800">See the session, not just the prompt.</text>
+  <text x="144" y="220" fill="#A8C4CF" font-family="Avenir Next, Segoe UI, sans-serif" font-size="24">A denser status-line HUD for Codex CLI with context, rate windows, Git state, approvals,</text>
+  <text x="144" y="252" fill="#A8C4CF" font-family="Avenir Next, Segoe UI, sans-serif" font-size="24">current plan step, and live tool activity in the footer you already look at.</text>
+
+  <g filter="url(#cardShadow)">
+    <rect x="210" y="286" width="1020" height="432" rx="30" fill="url(#glass)"/>
+  </g>
+  <rect x="210" y="286" width="1020" height="432" rx="30" fill="url(#glass)" stroke="rgba(173, 216, 230, 0.26)"/>
+  <rect x="210" y="286" width="1020" height="18" rx="18" fill="url(#shine)"/>
+
+  <circle cx="256" cy="330" r="7" fill="#FB7185"/>
+  <circle cx="284" cy="330" r="7" fill="#F59E0B"/>
+  <circle cx="312" cy="330" r="7" fill="#34D399"/>
+  <text x="344" y="338" fill="#9AB4BE" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="18">status_line_command :: current session footer</text>
+
+  <text x="250" y="394" fill="#5EEAD4" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="20">$ codex</text>
+  <text x="348" y="394" fill="#9AB4BE" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="20">model: gpt-5.4   cwd: codex-hud/codex-powerbar   approvals: manual</text>
+
+  <rect x="246" y="452" width="948" height="178" rx="18" fill="#081117" stroke="#203540"/>
+  <rect x="246" y="452" width="948" height="46" rx="18" fill="#0E1C24"/>
+  <text x="270" y="482" fill="#D9F3F1" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="18">[g5.4 | High | SPD]  |  codex-hud/codex-powerbar  git:(master* ↑2)</text>
+  <text x="270" y="536" fill="#A6C4CE" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="18">Context</text>
+  <g transform="translate(362 520)">
+    <rect width="136" height="18" rx="4" fill="#13232C"/>
+    <rect width="86" height="18" rx="4" fill="#1D4ED8"/>
+    <rect x="90" width="10" height="18" fill="#1D4ED8"/>
+    <rect x="104" width="10" height="18" fill="#1D4ED8"/>
+    <rect x="118" width="10" height="18" fill="#1D4ED8"/>
+  </g>
+  <text x="516" y="536" fill="#DDEEF4" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="18">55%  141k/258k</text>
+  <text x="706" y="536" fill="#A6C4CE" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="18">Usage</text>
+  <g transform="translate(780 520)">
+    <rect width="136" height="18" rx="4" fill="#13232C"/>
+    <rect width="18" height="18" rx="4" fill="#34D399"/>
+  </g>
+  <text x="936" y="536" fill="#DDEEF4" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="18">6%  resets 6:52 PM</text>
+  <g transform="translate(270 570)">
+    <text x="0" y="0" fill="#A6C4CE" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="18">U7</text>
+    <rect x="42" y="-16" width="136" height="18" rx="4" fill="#13232C"/>
+    <rect x="42" y="-16" width="44" height="18" rx="4" fill="#F59E0B"/>
+    <text x="198" y="0" fill="#DDEEF4" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="18">24%  resets Thu 9:55 PM</text>
+  </g>
+  <text x="270" y="624" fill="#A6C4CE" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="18">Approvals: Manual   Sandbox: workspace-write   Agents: 0   MCP: 0</text>
+  <text x="270" y="662" fill="#DDEEF4" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="18">◐ 1/3 Fix weekly reset fallback   |   ✓ Read x7   ✓ Edit x5   ✓ Bash x4</text>
+
+  <g transform="translate(1068 110)">
+    <rect width="208" height="108" rx="18" fill="#101D24" stroke="#25404B"/>
+    <text x="22" y="36" fill="#5EEAD4" font-family="Avenir Next, Segoe UI, sans-serif" font-size="17" font-weight="700">Live merge</text>
+    <text x="22" y="62" fill="#D7E7EC" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="15">env percentages +</text>
+    <text x="22" y="84" fill="#D7E7EC" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="15">rollout reset times</text>
+  </g>
+
+  <g transform="translate(1080 734)">
+    <rect width="228" height="104" rx="18" fill="#101D24" stroke="#25404B"/>
+    <text x="22" y="36" fill="#F59E0B" font-family="Avenir Next, Segoe UI, sans-serif" font-size="17" font-weight="700">Current layout</text>
+    <text x="22" y="62" fill="#D7E7EC" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="15">header</text>
+    <text x="22" y="82" fill="#D7E7EC" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="15">context + rates</text>
+    <text x="118" y="82" fill="#D7E7EC" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="15">environment</text>
+    <text x="22" y="102" fill="#D7E7EC" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="15">plan + tools</text>
+  </g>
+
+  <g transform="translate(136 760)">
+    <rect width="236" height="54" rx="27" fill="#0C1B22" stroke="#284653"/>
+    <text x="26" y="35" fill="#E9F5F7" font-family="Avenir Next, Segoe UI, sans-serif" font-size="20" font-weight="700">status_line_command ready</text>
+  </g>
+  <g transform="translate(394 760)">
+    <rect width="198" height="54" rx="27" fill="#0C1B22" stroke="#284653"/>
+    <text x="26" y="35" fill="#E9F5F7" font-family="Avenir Next, Segoe UI, sans-serif" font-size="20" font-weight="700">5h + 7d visibility</text>
+  </g>
+  <g transform="translate(614 760)">
+    <rect width="230" height="54" rx="27" fill="#0C1B22" stroke="#284653"/>
+    <text x="26" y="35" fill="#E9F5F7" font-family="Avenir Next, Segoe UI, sans-serif" font-size="20" font-weight="700">plan and tools in one line</text>
+  </g>
+</svg>

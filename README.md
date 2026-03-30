@@ -1,36 +1,48 @@
 # Powerbar
 
-Powerbar is a status-line HUD for Codex CLI. It adds a denser, more operational footer: model, reasoning mode, Git context, context usage, 5h/7d rate windows, current plan step, and live tool activity.
+Powerbar turns the Codex CLI footer into an operational HUD.
 
-![Powerbar screenshot](powerbar/docs/assets/hud-example.png)
+It keeps the session state you actually care about in the line you already watch: model, reasoning mode, context usage, 5h and 7d limits, Git state, approvals, current plan step, and live tool activity.
 
-## What This Repository Contains
+![Powerbar full terminal capture](powerbar/docs/assets/terminal-full.png)
 
-- `powerbar/`: the Node/TypeScript HUD itself
-- `.github/workflows/build-codex.yml`: GitHub Actions workflow that builds patched `codex` binaries
-- `powerbar/patches/codex-statusline-command.patch`: the Codex patch applied during source/prebuilt builds
+## Why Powerbar
 
-This repo is split intentionally:
+Codex's built-in footer is intentionally minimal. That works for short prompts. It gets thin once the session is doing real work across multiple turns, tools, files, and rate windows.
 
-- the repository root owns GitHub release automation
-- `powerbar/` owns the runnable HUD, installer, tests, and patch files
+Powerbar exists to make long Codex sessions legible without opening another pane or switching to a dashboard.
 
-## What Powerbar Does
+- footer-first: no sidecar UI, no browser tab, no tmux dependency
+- session-aware: merges live footer env data with rollout JSONL history
+- operational: surfaces reset times, plan progress, tool buckets, sandbox and approval state
+- installable: patched `codex` binary plus `status_line_command` wiring in one flow
 
-- renders a Codex HUD directly in the terminal footer
-- merges live Codex status-line env data with rollout JSONL data
-- prefers env data for live usage percentages, while backfilling missing reset times and richer session state from rollout
-- shows plan progress and tool activity in the same line so the footer stays useful under line limits
-- supports both standalone rendering and Codex `status_line_command`
+## What You See
 
-## Current Binary Support
+- active model, reasoning effort, fast mode, and CLI version
+- current project plus Git branch and dirty or ahead or behind indicators
+- context usage in percent and tokens
+- 5h and 7d usage windows with concrete reset times when available
+- approval policy, sandbox mode, agent count, and MCP count
+- current plan step plus recent or active tool activity
 
-GitHub builds and publishes patched binaries for:
+## Visual Direction
 
-- macOS Apple Silicon: `codex-darwin-arm64.tar.gz`
-- Linux x86_64: `codex-linux-x86_64.tar.gz`
+The product page still keeps diagrams for structure and merge behavior, but the first thing a user sees should be the real terminal output, not a mock.
 
-Intel macOS is no longer published as a prebuilt artifact. On Intel macOS, `powerbar/install.sh` falls back to source build.
+![Powerbar hero](powerbar/docs/assets/powerbar-hero.svg)
+
+## How It Works
+
+![Powerbar flow](powerbar/docs/assets/powerbar-flow.svg)
+
+Powerbar does not trust a single source.
+
+- live Codex env vars provide the freshest percentages, width, and selected footer items
+- rollout JSONL provides richer session context, plan labels, tool history, and reset timestamps
+- the HUD merges the two field by field so partial env data does not erase better rollout data
+
+That merge is the reason the footer can stay live while still showing accurate reset timing and richer context.
 
 ## Quick Start
 
@@ -42,25 +54,44 @@ cd codex-powerbar/powerbar
 
 Notes:
 
-- `./install.sh` with no flags is the guided interactive flow
-- `./install.sh --full` is the non-interactive fast path
-- `./install.sh --source` forces a local source build of patched `codex`
+- `./install.sh` is the guided flow
+- `./install.sh --full` is the one-shot install path
+- `./install.sh --source` forces a source build of patched `codex`
+- the installer refuses to run while any `codex` process is active
 
-## Where To Read Next
+## Platform Support
 
-- Full user and developer guide: `powerbar/README.md`
-- Install script: `powerbar/install.sh`
-- Renderer and parser sources: `powerbar/src/`
-- Tests: `powerbar/tests/`
+Prebuilt patched binaries are published for:
+
+- macOS Apple Silicon: `codex-darwin-arm64.tar.gz`
+- Linux x86_64: `codex-linux-x86_64.tar.gz`
+
+Source-build fallback covers:
+
+- Intel macOS
+- environments where prebuilt assets are unavailable but Rust and build dependencies are present
+
+Windows is not a primary target.
+
+## Repository Layout
+
+- `powerbar/`: runnable HUD, installer, tests, docs, and patch files
+- `.github/workflows/build-codex.yml`: patched `codex` release workflow
+- `powerbar/patches/codex-statusline-command.patch`: Codex patch that enables `status_line_command`
+
+The repository root owns CI and release automation. The product itself lives under `powerbar/`.
+
+## Read Next
+
+- user and developer guide: `powerbar/README.md`
+- installer entry point: `powerbar/install.sh`
+- parser and renderer sources: `powerbar/src/`
+- tests: `powerbar/tests/`
 
 ## Release Model
 
 - `master` pushes run lightweight HUD CI
-- patched binary builds on `master` only run when the workflow file, installer, or patch set changes
-- `workflow_dispatch` refreshes the rolling `latest` pre-release explicitly
-- pushing a `codex-v*` tag creates a versioned release
-
-Workflows live at:
-
-- `.github/workflows/hud-tests.yml`
-- `.github/workflows/build-codex.yml`
+- patched binary builds on `master` only run when the binary workflow, patch set, or installer changes
+- `workflow_dispatch` refreshes the rolling `latest` pre-release
+- `codex-v*` tags create patched Codex binary releases
+- `v*` tags are used for Powerbar product releases

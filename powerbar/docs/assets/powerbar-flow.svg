@@ -1,0 +1,79 @@
+<svg width="1440" height="860" viewBox="0 0 1440 860" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="flowBg" x1="64" y1="56" x2="1358" y2="804" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1418"/>
+      <stop offset="1" stop-color="#11232C"/>
+    </linearGradient>
+    <linearGradient id="tealCard" x1="122" y1="210" x2="458" y2="468" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0E2328"/>
+      <stop offset="1" stop-color="#112D30"/>
+    </linearGradient>
+    <linearGradient id="amberCard" x1="552" y1="210" x2="888" y2="468" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#241A0E"/>
+      <stop offset="1" stop-color="#312314"/>
+    </linearGradient>
+    <linearGradient id="blueCard" x1="982" y1="210" x2="1318" y2="468" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0D182C"/>
+      <stop offset="1" stop-color="#132444"/>
+    </linearGradient>
+    <marker id="arrow" markerWidth="16" markerHeight="16" refX="8" refY="8" orient="auto">
+      <path d="M0 0L16 8L0 16V0Z" fill="#9DD7E4"/>
+    </marker>
+  </defs>
+
+  <rect width="1440" height="860" fill="#081015"/>
+  <rect x="42" y="42" width="1356" height="776" rx="34" fill="url(#flowBg)"/>
+
+  <text x="118" y="138" fill="#F4FBFC" font-family="Avenir Next, Segoe UI, sans-serif" font-size="48" font-weight="800">How Powerbar builds the footer</text>
+  <text x="118" y="182" fill="#A7C3CC" font-family="Avenir Next, Segoe UI, sans-serif" font-size="24">Live status data stays fast. Rollout data fills in the fields Codex does not always export.</text>
+
+  <rect x="104" y="230" width="342" height="240" rx="28" fill="url(#tealCard)" stroke="#2A5861"/>
+  <text x="136" y="278" fill="#5EEAD4" font-family="Avenir Next, Segoe UI, sans-serif" font-size="24" font-weight="700">1. Live env snapshot</text>
+  <text x="136" y="320" fill="#E7F7F7" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="18">CODEX_CONTEXT_USED_PCT</text>
+  <text x="136" y="348" fill="#E7F7F7" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="18">CODEX_RATE_PRIMARY_PCT</text>
+  <text x="136" y="376" fill="#E7F7F7" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="18">CODEX_RATE_SECONDARY_PCT</text>
+  <text x="136" y="404" fill="#E7F7F7" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="18">CODEX_STATUS_LINE_ITEMS</text>
+  <text x="136" y="442" fill="#A8CACE" font-family="Avenir Next, Segoe UI, sans-serif" font-size="18">Fast to query. Best source for current percentages, width,</text>
+  <text x="136" y="466" fill="#A8CACE" font-family="Avenir Next, Segoe UI, sans-serif" font-size="18">selected footer items, and live runtime mode.</text>
+
+  <rect x="548" y="230" width="342" height="240" rx="28" fill="url(#amberCard)" stroke="#73552A"/>
+  <text x="580" y="278" fill="#F59E0B" font-family="Avenir Next, Segoe UI, sans-serif" font-size="24" font-weight="700">2. Rollout JSONL parse</text>
+  <text x="580" y="320" fill="#FFF5E7" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="18">session_meta / turn_context</text>
+  <text x="580" y="348" fill="#FFF5E7" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="18">token_count.rate_limits</text>
+  <text x="580" y="376" fill="#FFF5E7" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="18">plan_update / update_plan</text>
+  <text x="580" y="404" fill="#FFF5E7" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="18">exec + MCP tool events</text>
+  <text x="580" y="442" fill="#E0C8A2" font-family="Avenir Next, Segoe UI, sans-serif" font-size="18">Best source for reset timestamps, richer plan text,</text>
+  <text x="580" y="466" fill="#E0C8A2" font-family="Avenir Next, Segoe UI, sans-serif" font-size="18">tool history, and session identity.</text>
+
+  <rect x="992" y="230" width="342" height="240" rx="28" fill="url(#blueCard)" stroke="#38629C"/>
+  <text x="1024" y="278" fill="#93C5FD" font-family="Avenir Next, Segoe UI, sans-serif" font-size="24" font-weight="700">3. Field-by-field merge</text>
+  <text x="1024" y="320" fill="#E6F1FF" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="18">env percent wins when present</text>
+  <text x="1024" y="348" fill="#E6F1FF" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="18">rollout reset time fills missing env data</text>
+  <text x="1024" y="376" fill="#E6F1FF" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="18">rollout plan labels beat placeholder counts</text>
+  <text x="1024" y="404" fill="#E6F1FF" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="18">tool summaries stay rollout-backed</text>
+  <text x="1024" y="442" fill="#BCD5F2" font-family="Avenir Next, Segoe UI, sans-serif" font-size="18">This is why Powerbar can show concrete 5h / 7d reset</text>
+  <text x="1024" y="466" fill="#BCD5F2" font-family="Avenir Next, Segoe UI, sans-serif" font-size="18">times even when the live footer env is partial.</text>
+
+  <path d="M446 350H528" stroke="#9DD7E4" stroke-width="5" stroke-linecap="round" marker-end="url(#arrow)"/>
+  <path d="M890 350H972" stroke="#9DD7E4" stroke-width="5" stroke-linecap="round" marker-end="url(#arrow)"/>
+
+  <rect x="126" y="566" width="1188" height="182" rx="28" fill="#0B151B" stroke="#29414A"/>
+  <text x="160" y="618" fill="#F4FBFC" font-family="Avenir Next, Segoe UI, sans-serif" font-size="28" font-weight="700">Rendered footer rows</text>
+
+  <rect x="160" y="648" width="242" height="64" rx="20" fill="#11212A" stroke="#2E4A56"/>
+  <text x="184" y="687" fill="#DFF4F5" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="18">header</text>
+  <text x="184" y="709" fill="#93B6C2" font-family="Avenir Next, Segoe UI, sans-serif" font-size="15">model, repo, git, badges</text>
+
+  <rect x="430" y="648" width="284" height="64" rx="20" fill="#11212A" stroke="#2E4A56"/>
+  <text x="454" y="687" fill="#DFF4F5" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="18">context + rate windows</text>
+  <text x="454" y="709" fill="#93B6C2" font-family="Avenir Next, Segoe UI, sans-serif" font-size="15">tokens, 5h, 7d, reset times</text>
+
+  <rect x="742" y="648" width="238" height="64" rx="20" fill="#11212A" stroke="#2E4A56"/>
+  <text x="766" y="687" fill="#DFF4F5" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="18">environment</text>
+  <text x="766" y="709" fill="#93B6C2" font-family="Avenir Next, Segoe UI, sans-serif" font-size="15">approvals, sandbox, agents</text>
+
+  <rect x="1008" y="648" width="272" height="64" rx="20" fill="#11212A" stroke="#2E4A56"/>
+  <text x="1032" y="687" fill="#DFF4F5" font-family="IBM Plex Mono, SFMono-Regular, Menlo, monospace" font-size="18">plan + tool summary</text>
+  <text x="1032" y="709" fill="#93B6C2" font-family="Avenir Next, Segoe UI, sans-serif" font-size="15">current step and active work</text>
+  <text x="160" y="784" fill="#8FB4BF" font-family="Avenir Next, Segoe UI, sans-serif" font-size="18">Result: one footer, four high-signal rows, no extra pane to manage.</text>
+</svg>
