@@ -1,5 +1,5 @@
 diff --git a/codex-rs/Cargo.lock b/codex-rs/Cargo.lock
-index 9ae4e7c46..69e9d18f9 100644
+index 9ae4e7c..69e9d18 100644
 --- a/codex-rs/Cargo.lock
 +++ b/codex-rs/Cargo.lock
 @@ -402,7 +402,7 @@ checksum = "5f0e0fee31ef5ed1ba1316088939cea399010ed7731dba877ed44aeb407a75ea"
@@ -774,7 +774,7 @@ index 9ae4e7c46..69e9d18f9 100644
   "anyhow",
   "codex-core",
 diff --git a/codex-rs/cli/src/main.rs b/codex-rs/cli/src/main.rs
-index 12a531d35..da2551052 100644
+index 12a531d..da25510 100644
 --- a/codex-rs/cli/src/main.rs
 +++ b/codex-rs/cli/src/main.rs
 @@ -455,7 +455,13 @@ fn handle_app_exit(exit_info: AppExitInfo) -> anyhow::Result<()> {
@@ -793,7 +793,7 @@ index 12a531d35..da2551052 100644
      }
      if let Some(action) = update_action {
 diff --git a/codex-rs/core/src/config/config_tests.rs b/codex-rs/core/src/config/config_tests.rs
-index 949906ac4..1ef6bee77 100644
+index 949906a..1ef6bee 100644
 --- a/codex-rs/core/src/config/config_tests.rs
 +++ b/codex-rs/core/src/config/config_tests.rs
 @@ -262,6 +262,7 @@ fn config_toml_deserializes_model_availability_nux() {
@@ -845,7 +845,7 @@ index 949906ac4..1ef6bee77 100644
          tui_theme: None,
          otel: OtelConfig::default(),
 diff --git a/codex-rs/core/src/config/mod.rs b/codex-rs/core/src/config/mod.rs
-index b2b55feec..a538a49dd 100644
+index b2b55fe..a538a49 100644
 --- a/codex-rs/core/src/config/mod.rs
 +++ b/codex-rs/core/src/config/mod.rs
 @@ -365,6 +365,8 @@ pub struct Config {
@@ -869,7 +869,7 @@ index b2b55feec..a538a49dd 100644
              tui_theme: cfg.tui.as_ref().and_then(|t| t.theme.clone()),
              otel: {
 diff --git a/codex-rs/core/src/config/types.rs b/codex-rs/core/src/config/types.rs
-index 05fbaaaa4..887184dbb 100644
+index 05fbaaa..887184d 100644
 --- a/codex-rs/core/src/config/types.rs
 +++ b/codex-rs/core/src/config/types.rs
 @@ -772,6 +772,13 @@ pub struct Tui {
@@ -887,7 +887,7 @@ index 05fbaaaa4..887184dbb 100644
      ///
      /// When set, the TUI renders the selected items into the terminal window/tab title.
 diff --git a/codex-rs/tui/src/app.rs b/codex-rs/tui/src/app.rs
-index fe1cb6ae0..02b1eebfb 100644
+index fe1cb6a..02b1eeb 100644
 --- a/codex-rs/tui/src/app.rs
 +++ b/codex-rs/tui/src/app.rs
 @@ -713,6 +713,36 @@ fn migration_prompt_hidden(config: &Config, migration_config_key: &str) -> bool
@@ -957,7 +957,7 @@ index fe1cb6ae0..02b1eebfb 100644
                  let ids = items.iter().map(ToString::to_string).collect::<Vec<_>>();
                  let edit = codex_core::config::edit::terminal_title_items_edit(&ids);
 diff --git a/codex-rs/tui/src/app_event.rs b/codex-rs/tui/src/app_event.rs
-index b5e81edd9..f1f1d6877 100644
+index b5e81ed..f1f1d68 100644
 --- a/codex-rs/tui/src/app_event.rs
 +++ b/codex-rs/tui/src/app_event.rs
 @@ -530,12 +530,23 @@ pub(crate) enum AppEvent {
@@ -985,7 +985,7 @@ index b5e81edd9..f1f1d6877 100644
      TerminalTitleSetup {
          items: Vec<TerminalTitleItem>,
 diff --git a/codex-rs/tui/src/bottom_pane/chat_composer.rs b/codex-rs/tui/src/bottom_pane/chat_composer.rs
-index 6d5c92d49..e2fe97289 100644
+index 6d5c92d..e2fe972 100644
 --- a/codex-rs/tui/src/bottom_pane/chat_composer.rs
 +++ b/codex-rs/tui/src/bottom_pane/chat_composer.rs
 @@ -128,6 +128,7 @@
@@ -1219,7 +1219,7 @@ index 6d5c92d49..e2fe97289 100644
                  } else {
                      render_footer_from_props(
 diff --git a/codex-rs/tui/src/bottom_pane/footer.rs b/codex-rs/tui/src/bottom_pane/footer.rs
-index c8148c90b..213202881 100644
+index c8148c9..2132028 100644
 --- a/codex-rs/tui/src/bottom_pane/footer.rs
 +++ b/codex-rs/tui/src/bottom_pane/footer.rs
 @@ -77,6 +77,8 @@ pub(crate) struct FooterProps {
@@ -1526,7 +1526,7 @@ index c8148c90b..213202881 100644
              active_agent_label: None,
          };
 diff --git a/codex-rs/tui/src/bottom_pane/mod.rs b/codex-rs/tui/src/bottom_pane/mod.rs
-index eda37fe9c..e8377e229 100644
+index eda37fe..e8377e2 100644
 --- a/codex-rs/tui/src/bottom_pane/mod.rs
 +++ b/codex-rs/tui/src/bottom_pane/mod.rs
 @@ -43,6 +43,7 @@ use std::time::Duration;
@@ -1564,8 +1564,105 @@ index eda37fe9c..e8377e229 100644
      pub(crate) fn set_status_line_enabled(&mut self, enabled: bool) {
          if self.composer.set_status_line_enabled(enabled) {
              self.request_redraw();
+diff --git a/codex-rs/tui/src/bottom_pane/powerbar_setup.rs b/codex-rs/tui/src/bottom_pane/powerbar_setup.rs
+new file mode 100644
+index 0000000..c8af3a7
+--- /dev/null
++++ b/codex-rs/tui/src/bottom_pane/powerbar_setup.rs
+@@ -0,0 +1,91 @@
++//! Powerbar configuration view for customizing HUD-specific display options.
++
++use ratatui::buffer::Buffer;
++use ratatui::layout::Rect;
++use ratatui::text::Line;
++
++use crate::app_event::AppEvent;
++use crate::app_event_sender::AppEventSender;
++use crate::bottom_pane::CancellationEvent;
++use crate::bottom_pane::bottom_pane_view::BottomPaneView;
++use crate::bottom_pane::multi_select_picker::MultiSelectItem;
++use crate::bottom_pane::multi_select_picker::MultiSelectPicker;
++use crate::render::renderable::Renderable;
++
++const SHOW_DETAILS_ID: &str = "show-details";
++
++fn preview_line(items: &[MultiSelectItem]) -> Option<Line<'static>> {
++    let show_details = items
++        .iter()
++        .any(|item| item.id == SHOW_DETAILS_ID && item.enabled);
++    let preview = if show_details {
++        "HUD details enabled"
++    } else {
++        "HUD details hidden"
++    };
++    Some(Line::from(preview))
++}
++
++pub(crate) struct PowerbarSetupView {
++    picker: MultiSelectPicker,
++}
++
++impl PowerbarSetupView {
++    pub(crate) fn new(show_details: bool, app_event_tx: AppEventSender) -> Self {
++        let items = vec![MultiSelectItem {
++            id: SHOW_DETAILS_ID.to_string(),
++            name: SHOW_DETAILS_ID.to_string(),
++            description: Some(
++                "Show HUD-only details like duration, approvals, plan, tool summary, and extra badges."
++                    .to_string(),
++            ),
++            enabled: show_details,
++        }];
++
++        Self {
++            picker: MultiSelectPicker::builder(
++                "Configure Powerbar".to_string(),
++                Some("Select which HUD-specific details to display.".to_string()),
++                app_event_tx,
++            )
++            .instructions(vec![
++                "Use ↑↓ to navigate, space to select, enter to confirm, esc to cancel.".into(),
++            ])
++            .items(items)
++            .on_preview(preview_line)
++            .on_confirm(|ids, app_event| {
++                let show_details = ids.iter().any(|id| id == SHOW_DETAILS_ID);
++                app_event.send(AppEvent::PowerbarSetup { show_details });
++            })
++            .on_cancel(|app_event| {
++                app_event.send(AppEvent::PowerbarSetupCancelled);
++            })
++            .build(),
++        }
++    }
++}
++
++impl BottomPaneView for PowerbarSetupView {
++    fn handle_key_event(&mut self, key_event: crossterm::event::KeyEvent) {
++        self.picker.handle_key_event(key_event);
++    }
++
++    fn is_complete(&self) -> bool {
++        self.picker.complete
++    }
++
++    fn on_ctrl_c(&mut self) -> CancellationEvent {
++        self.picker.close();
++        CancellationEvent::Handled
++    }
++}
++
++impl Renderable for PowerbarSetupView {
++    fn render(&self, area: Rect, buf: &mut Buffer) {
++        self.picker.render(area, buf)
++    }
++
++    fn desired_height(&self, width: u16) -> u16 {
++        self.picker.desired_height(width)
++    }
++}
 diff --git a/codex-rs/tui/src/chatwidget.rs b/codex-rs/tui/src/chatwidget.rs
-index 68497f4e0..94fa31eef 100644
+index 68497f4..b481d04 100644
 --- a/codex-rs/tui/src/chatwidget.rs
 +++ b/codex-rs/tui/src/chatwidget.rs
 @@ -46,6 +46,7 @@ use crate::audio_device::list_realtime_audio_device_names;
@@ -1708,7 +1805,7 @@ index 68497f4e0..94fa31eef 100644
      fn collect_runtime_metrics_delta(&mut self) {
          if let Some(delta) = self.session_telemetry.runtime_metrics_summary() {
              self.apply_runtime_metrics_delta(delta);
-@@ -4224,6 +4311,9 @@ impl ChatWidget {
+@@ -3824,6 +3911,9 @@ impl ChatWidget {
              status_line_branch_cwd: None,
              status_line_branch_pending: false,
              status_line_branch_lookup_complete: false,
@@ -1718,7 +1815,7 @@ index 68497f4e0..94fa31eef 100644
              external_editor_state: ExternalEditorState::Closed,
              realtime_conversation: RealtimeConversationUiState::default(),
              last_rendered_user_message_event: None,
-@@ -4241,7 +4331,14 @@ impl ChatWidget {
+@@ -3841,7 +3931,14 @@ impl ChatWidget {
              .set_audio_device_selection_enabled(widget.realtime_audio_device_selection_enabled());
          widget
              .bottom_pane
@@ -1734,7 +1831,59 @@ index 68497f4e0..94fa31eef 100644
          widget
              .bottom_pane
              .set_collaboration_modes_enabled(/*enabled*/ true);
-@@ -4779,6 +4876,9 @@ impl ChatWidget {
+@@ -4028,6 +4125,9 @@ impl ChatWidget {
+             status_line_branch_cwd: None,
+             status_line_branch_pending: false,
+             status_line_branch_lookup_complete: false,
++            status_line_command_value: None,
++            status_line_command_cwd: None,
++            status_line_command_pending: false,
+             external_editor_state: ExternalEditorState::Closed,
+             realtime_conversation: RealtimeConversationUiState::default(),
+             last_rendered_user_message_event: None,
+@@ -4045,7 +4145,14 @@ impl ChatWidget {
+             .set_audio_device_selection_enabled(widget.realtime_audio_device_selection_enabled());
+         widget
+             .bottom_pane
+-            .set_status_line_enabled(!widget.configured_status_line_items().is_empty());
++            .set_status_line_enabled(
++                !widget.configured_status_line_items().is_empty()
++                    || widget
++                        .config
++                        .tui_status_line_command
++                        .as_ref()
++                        .is_some_and(|cmd| !cmd.trim().is_empty()),
++            );
+         widget
+             .bottom_pane
+             .set_collaboration_modes_enabled(/*enabled*/ true);
+@@ -4224,6 +4331,9 @@ impl ChatWidget {
+             status_line_branch_cwd: None,
+             status_line_branch_pending: false,
+             status_line_branch_lookup_complete: false,
++            status_line_command_value: None,
++            status_line_command_cwd: None,
++            status_line_command_pending: false,
+             external_editor_state: ExternalEditorState::Closed,
+             realtime_conversation: RealtimeConversationUiState::default(),
+             last_rendered_user_message_event: None,
+@@ -4241,7 +4351,14 @@ impl ChatWidget {
+             .set_audio_device_selection_enabled(widget.realtime_audio_device_selection_enabled());
+         widget
+             .bottom_pane
+-            .set_status_line_enabled(!widget.configured_status_line_items().is_empty());
++            .set_status_line_enabled(
++                !widget.configured_status_line_items().is_empty()
++                    || widget
++                        .config
++                        .tui_status_line_command
++                        .as_ref()
++                        .is_some_and(|cmd| !cmd.trim().is_empty()),
++            );
+         widget
+             .bottom_pane
+             .set_collaboration_modes_enabled(/*enabled*/ true);
+@@ -4779,6 +4896,9 @@ impl ChatWidget {
              SlashCommand::Statusline => {
                  self.open_status_line_setup();
              }
@@ -1744,7 +1893,7 @@ index 68497f4e0..94fa31eef 100644
              SlashCommand::Theme => {
                  self.open_theme_picker();
              }
-@@ -5962,6 +6062,11 @@ impl ChatWidget {
+@@ -5962,6 +6082,11 @@ impl ChatWidget {
          self.bottom_pane.show_view(Box::new(view));
      }
  
@@ -1756,7 +1905,7 @@ index 68497f4e0..94fa31eef 100644
      fn open_theme_picker(&mut self) {
          let codex_home = codex_core::config::find_codex_home().ok();
          let terminal_width = self
-@@ -9703,5 +9808,22 @@ pub(crate) fn show_review_commit_picker_with_entries(
+@@ -9703,5 +9828,22 @@ pub(crate) fn show_review_commit_picker_with_entries(
      });
  }
  
@@ -1780,7 +1929,7 @@ index 68497f4e0..94fa31eef 100644
  #[cfg(test)]
  pub(crate) mod tests;
 diff --git a/codex-rs/tui/src/chatwidget/status_surfaces.rs b/codex-rs/tui/src/chatwidget/status_surfaces.rs
-index 837ef0504..88c685643 100644
+index 837ef05..88c6856 100644
 --- a/codex-rs/tui/src/chatwidget/status_surfaces.rs
 +++ b/codex-rs/tui/src/chatwidget/status_surfaces.rs
 @@ -129,26 +129,53 @@ impl ChatWidget {
@@ -2002,7 +2151,7 @@ index 837ef0504..88c685643 100644
      ///
      /// Returning `None` means "omit this item for now", not "configuration error". Callers rely on
 diff --git a/codex-rs/tui/src/slash_command.rs b/codex-rs/tui/src/slash_command.rs
-index ec624d3fb..c01abce9e 100644
+index ec624d3..c01abce 100644
 --- a/codex-rs/tui/src/slash_command.rs
 +++ b/codex-rs/tui/src/slash_command.rs
 @@ -40,6 +40,7 @@ pub enum SlashCommand {
