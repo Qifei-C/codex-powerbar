@@ -634,8 +634,6 @@ export async function finalizeSnapshot(state: ParserState): Promise<HudSnapshot>
 
   snapshot.environment = collectEnvironment(snapshot.cwd);
 
-  applyCodexEnvOverrides(snapshot);
-
   return snapshot;
 }
 

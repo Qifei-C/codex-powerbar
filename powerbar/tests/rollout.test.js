@@ -5,7 +5,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildSnapshot, findRolloutForSession } from '../dist/rollout.js';
-import { mergeSnapshotsPreferEnv } from '../dist/incremental-parser.js';
+import {
+  createParserState,
+  finalizeSnapshot,
+  mergeSnapshotsPreferEnv,
+  parseIncremental,
+} from '../dist/incremental-parser.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -276,6 +281,60 @@ test('mergeSnapshotsPreferEnv preserves rollout rate reset times when env only p
     assert.equal(merged.ratePrimary?.usedPercent, 12);
     assert.equal(merged.ratePrimary?.resetsAt?.toISOString(), rolloutReset.toISOString());
     assert.equal(merged.ratePrimary?.windowMinutes, 300);
+  } finally {
+    process.env = prevEnv;
+  }
+});
+
+test('buildSnapshot does not let env-only rate fields erase rollout reset times', async () => {
+  const prevEnv = { ...process.env };
+  process.env.CODEX_RATE_PRIMARY_PCT = '6';
+  process.env.CODEX_RATE_PRIMARY_WINDOW_MIN = '300';
+  delete process.env.CODEX_RATE_PRIMARY_RESETS;
+  process.env.CODEX_RATE_SECONDARY_PCT = '24';
+  process.env.CODEX_RATE_SECONDARY_WINDOW_MIN = '10080';
+  delete process.env.CODEX_RATE_SECONDARY_RESETS;
+
+  const fixture = path.join(__dirname, 'fixtures', 'rollout-sample.jsonl');
+
+  try {
+    const snapshot = await buildSnapshot(fixture);
+
+    assert.equal(snapshot.ratePrimary?.usedPercent, 24.7);
+    assert.equal(snapshot.ratePrimary?.resetsAt?.toISOString(), '2026-02-13T19:05:00.000Z');
+    assert.equal(snapshot.ratePrimary?.windowMinutes, 300);
+
+    assert.equal(snapshot.rateSecondary?.usedPercent, 78.2);
+    assert.equal(snapshot.rateSecondary?.resetsAt?.toISOString(), '2026-02-20T19:05:00.000Z');
+    assert.equal(snapshot.rateSecondary?.windowMinutes, 10080);
+  } finally {
+    process.env = prevEnv;
+  }
+});
+
+test('finalizeSnapshot preserves rollout reset times before env merge', async () => {
+  const prevEnv = { ...process.env };
+  process.env.CODEX_RATE_PRIMARY_PCT = '6';
+  process.env.CODEX_RATE_PRIMARY_WINDOW_MIN = '300';
+  delete process.env.CODEX_RATE_PRIMARY_RESETS;
+  process.env.CODEX_RATE_SECONDARY_PCT = '24';
+  process.env.CODEX_RATE_SECONDARY_WINDOW_MIN = '10080';
+  delete process.env.CODEX_RATE_SECONDARY_RESETS;
+
+  const fixture = path.join(__dirname, 'fixtures', 'rollout-sample.jsonl');
+
+  try {
+    const state = createParserState(fixture);
+    parseIncremental(state);
+    const snapshot = await finalizeSnapshot(state);
+
+    assert.equal(snapshot.ratePrimary?.usedPercent, 24.7);
+    assert.equal(snapshot.ratePrimary?.resetsAt?.toISOString(), '2026-02-13T19:05:00.000Z');
+    assert.equal(snapshot.ratePrimary?.windowMinutes, 300);
+
+    assert.equal(snapshot.rateSecondary?.usedPercent, 78.2);
+    assert.equal(snapshot.rateSecondary?.resetsAt?.toISOString(), '2026-02-20T19:05:00.000Z');
+    assert.equal(snapshot.rateSecondary?.windowMinutes, 10080);
   } finally {
     process.env = prevEnv;
   }

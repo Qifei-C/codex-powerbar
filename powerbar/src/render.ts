@@ -20,22 +20,37 @@ function formatTokens(value: number): string {
   return `${value}`;
 }
 
-function formatRemaining(to?: Date): string {
+function formatResetClock(to?: Date): string {
   if (!to) return '';
   const ts = to.getTime();
   if (Number.isNaN(ts)) return '';
-  const diff = ts - Date.now();
+
+  const now = new Date();
+  const diff = ts - now.getTime();
   if (diff <= 0) return '';
-  const mins = Math.ceil(diff / 60000);
-  if (mins >= 24 * 60) {
-    const d = Math.floor(mins / (24 * 60));
-    const h = Math.floor((mins % (24 * 60)) / 60);
-    return h > 0 ? `${d}d ${h}h` : `${d}d`;
+
+  const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const minutes = `${to.getMinutes()}`.padStart(2, '0');
+  const rawHours = to.getHours();
+  const hours = rawHours % 12 || 12;
+  const ampm = rawHours >= 12 ? 'PM' : 'AM';
+  const timeText = `${hours}:${minutes} ${ampm}`;
+
+  const sameDay = now.getFullYear() === to.getFullYear()
+    && now.getMonth() === to.getMonth()
+    && now.getDate() === to.getDate();
+  if (sameDay) return timeText;
+
+  if (diff < 7 * 24 * 60 * 60 * 1000) {
+    return `${weekdays[to.getDay()]} ${timeText}`;
   }
-  if (mins < 60) return `${mins}m`;
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+
+  const dateText = `${months[to.getMonth()]} ${to.getDate()}`;
+  if (now.getFullYear() === to.getFullYear()) {
+    return `${dateText} ${timeText}`;
+  }
+  return `${dateText}, ${to.getFullYear()} ${timeText}`;
 }
 
 function formatDuration(from?: Date): string | null {
@@ -135,9 +150,9 @@ function colorPercent(percent: number, text: string): string {
 }
 
 function renderWindow(label: string, percent: number, resetsAt?: Date, windowMinutes?: number): string {
-  const resetText = formatRemaining(resetsAt);
+  const resetText = formatResetClock(resetsAt);
   const body = `${colorPercent(percent, bar(percent, 10))} ${colorPercent(percent, `${percent}%`)}`;
-  if (resetText) return `${dim(label)} ${body} ${dim(`(resets in ${resetText})`)}`;
+  if (resetText) return `${dim(label)} ${body} ${dim(`(resets ${resetText})`)}`;
   if (windowMinutes && windowMinutes > 0) {
     const windowLabel = windowMinutes >= 24 * 60
       ? `${Math.round(windowMinutes / (24 * 60))}d`
@@ -522,16 +537,16 @@ function buildCompactLine(snapshot: HudSnapshot, config: HudConfig): string {
   }
   if (config.showRates && snapshot.ratePrimary && itemEnabled(snapshot, 'five-hour-limit')) {
     const primaryPercent = Math.round(snapshot.ratePrimary.usedPercent);
-    const primaryRemain = formatRemaining(snapshot.ratePrimary.resetsAt);
-    extra.push(`${dim('U5')} ${colorPercent(primaryPercent, `${primaryPercent}%`)}${primaryRemain ? ` ${dim(primaryRemain)}` : ''}`);
+    const primaryReset = formatResetClock(snapshot.ratePrimary.resetsAt);
+    extra.push(`${dim('U5')} ${colorPercent(primaryPercent, `${primaryPercent}%`)}${primaryReset ? ` ${dim(primaryReset)}` : ''}`);
   }
   if (snapshot.rateSecondary && itemEnabled(snapshot, 'weekly-limit')) {
     const secondaryPercent = Math.round(snapshot.rateSecondary.usedPercent);
     const meetsThreshold = secondaryPercent >= config.sevenDayThreshold;
     const wideEnough = detectStatusWidth() >= 140;
     if (meetsThreshold || wideEnough) {
-      const secondaryRemain = formatRemaining(snapshot.rateSecondary.resetsAt);
-      extra.push(`${dim('U7')} ${colorPercent(secondaryPercent, `${secondaryPercent}%`)}${secondaryRemain ? ` ${dim(secondaryRemain)}` : ''}`);
+      const secondaryReset = formatResetClock(snapshot.rateSecondary.resetsAt);
+      extra.push(`${dim('U7')} ${colorPercent(secondaryPercent, `${secondaryPercent}%`)}${secondaryReset ? ` ${dim(secondaryReset)}` : ''}`);
     }
   }
   // Merge extra metrics into the left side, then assemble with badges.

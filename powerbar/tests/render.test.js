@@ -221,6 +221,64 @@ test('renderStatusLine resolves compact preset into one line', () => {
   assert.ok(line.includes('U5'));
 });
 
+test('renderStatusLine shows concrete reset times when reset timestamps are available', () => {
+  const originalNow = Date.now;
+  const originalWidth = process.env.POWERBAR_WIDTH;
+  Date.now = () => new Date('2026-03-30T17:00:00Z').getTime();
+  process.env.POWERBAR_WIDTH = '160';
+
+  try {
+    const line = renderStatusLine(
+      {
+        sessionPath: '/tmp/rollout.jsonl',
+        cwd: '/repo/project',
+        model: 'gpt-5.4',
+        gitBranch: 'main',
+        gitDirty: false,
+        turnState: 'idle',
+        contextUsedPercent: 25,
+        contextTokens: 64500,
+        contextWindow: 258000,
+        ratePrimary: { usedPercent: 24.7, resetsAt: new Date('2026-03-30T18:52:20Z'), windowMinutes: 300 },
+        rateSecondary: { usedPercent: 81, resetsAt: new Date('2026-04-03T01:55:22Z'), windowMinutes: 10080 },
+        activeTools: [],
+        recentTools: [],
+        plan: [],
+      },
+      {
+        preset: 'minimal',
+        refreshMs: 700,
+        lineLayout: 'compact',
+        showDetails: false,
+        pathLevels: 1,
+        maxTools: 0,
+        showTools: false,
+        showPlan: false,
+        showRates: true,
+        showSessionPath: false,
+        showGitAheadBehind: false,
+        showGitFileStats: false,
+        sevenDayThreshold: 80,
+        contextDisplay: 'percent',
+        badges: { ...DEFAULT_BADGES },
+      },
+    );
+
+    assert.ok(line.includes('U5'));
+    assert.ok(line.includes('U7'));
+    assert.ok(!line.includes('5h window'));
+    assert.ok(!line.includes('7d window'));
+    assert.match(line, /\d{1,2}:\d{2} [AP]M/);
+  } finally {
+    Date.now = originalNow;
+    if (originalWidth === undefined) {
+      delete process.env.POWERBAR_WIDTH;
+    } else {
+      process.env.POWERBAR_WIDTH = originalWidth;
+    }
+  }
+});
+
 test('renderStatusLine renders plan and tools on the same line', () => {
   const line = renderStatusLine(
     {
