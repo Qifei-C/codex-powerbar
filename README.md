@@ -26,24 +26,6 @@ Powerbar exists to make long Codex sessions legible without opening another pane
 - approval policy, sandbox mode, agent count, and MCP count
 - current plan step plus recent or active tool activity
 
-## Visual Direction
-
-The product page still keeps diagrams for structure and merge behavior, but the first thing a user sees should be the real terminal output, not a mock.
-
-![Powerbar hero](powerbar/docs/assets/powerbar-hero.svg)
-
-## How It Works
-
-![Powerbar flow](powerbar/docs/assets/powerbar-flow.svg)
-
-Powerbar does not trust a single source.
-
-- live Codex env vars provide the freshest percentages, width, and selected footer items
-- rollout JSONL provides richer session context, plan labels, tool history, and reset timestamps
-- the HUD merges the two field by field so partial env data does not erase better rollout data
-
-That merge is the reason the footer can stay live while still showing accurate reset timing and richer context.
-
 ## Quick Start
 
 ```bash

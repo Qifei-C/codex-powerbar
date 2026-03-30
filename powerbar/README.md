@@ -35,10 +35,6 @@ Less-detail view with a tighter footer:
 
 ![Powerbar less details capture](docs/assets/terminal-less-details.png)
 
-Structural visual for the product page:
-
-![Powerbar hero](docs/assets/powerbar-hero.svg)
-
 ## Footer Anatomy
 
 The current expanded layout is designed around four rows:
@@ -58,24 +54,6 @@ Approvals: Manual | Sandbox: workspace-write | Agents: 0 | MCP: 0
 ```
 
 The compact preset compresses the same data into a single status line when space is tight.
-
-## How The Data Merge Works
-
-![Powerbar flow](docs/assets/powerbar-flow.svg)
-
-Powerbar uses two data sources because neither is good enough on its own.
-
-- live env data is the freshest source for current percentages and runtime selections
-- rollout JSONL is the richer source for reset timestamps, plan text, tool history, and session identity
-
-Merge rules are deliberate:
-
-- env percentages win when the env vars are actually present
-- rollout reset timestamps backfill missing env reset data
-- rollout plan labels beat placeholder progress-only env data
-- tool summaries remain rollout-backed
-
-That merge is why Powerbar can show concrete 5h and 7d reset times even when Codex only exports percent and window length in the live footer env.
 
 ## Install
 
