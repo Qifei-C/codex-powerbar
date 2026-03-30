@@ -1,6 +1,6 @@
 {
   "name": "powerbar",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Real-time HUD harness for Codex sessions using rollout JSONL",
   "type": "module",
   "main": "dist/index.js",

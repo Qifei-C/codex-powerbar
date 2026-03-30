@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { dim } from './colors.js';
 import { findLatestRollout, findLatestRolloutForCwd, findRolloutForSession } from './rollout.js';
 import { buildSnapshotFromEnv, mergeSnapshotsPreferEnv } from './incremental-parser.js';
 import { createParseQueue } from './parse-queue.js';
@@ -7,6 +8,8 @@ import { render, renderStatusLine } from './render.js';
 import { renderOverview } from './overview.js';
 import { runSelfCheck } from './self-check.js';
 import { loadConfig } from './config.js';
+import { fetchAndCacheLatestVersion, fireAndForgetUpdateCheck, getUpdateHint } from './update-check.js';
+import { POWERBAR_VERSION } from './version.js';
 
 interface CliArgs {
   once: boolean;
@@ -14,15 +17,24 @@ interface CliArgs {
   statusLine: boolean;
   overview: boolean;
   selfCheck: boolean;
+  updateCheckBg: boolean;
   intervalMs?: number;
   rolloutPath?: string;
   sessionId?: string;
   cwdHint?: string;
   codexHome?: string;
+  updateCheckVersion?: string;
 }
 
 function parseArgs(argv: string[]): CliArgs {
-  const out: CliArgs = { once: false, clear: true, statusLine: false, overview: false, selfCheck: false };
+  const out: CliArgs = {
+    once: false,
+    clear: true,
+    statusLine: false,
+    overview: false,
+    selfCheck: false,
+    updateCheckBg: false,
+  };
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -35,6 +47,12 @@ function parseArgs(argv: string[]): CliArgs {
       out.overview = true;
     } else if (arg === '--self-check') {
       out.selfCheck = true;
+    } else if (arg === '--update-check-bg') {
+      out.updateCheckBg = true;
+      if (argv[i + 1] && !argv[i + 1].startsWith('--')) {
+        out.updateCheckVersion = argv[i + 1];
+        i += 1;
+      }
     } else if (arg === '--no-clear') {
       out.clear = false;
     } else if (arg === '--rollout' && argv[i + 1]) {
@@ -142,7 +160,10 @@ async function tick(args: CliArgs): Promise<number> {
   }
 
   if (args.statusLine) {
-    const frame = renderStatusLine(snapshot, config) + '\n';
+    fireAndForgetUpdateCheck(POWERBAR_VERSION);
+    const hint = getUpdateHint(POWERBAR_VERSION, sessionId);
+    const suffix = hint ? `${dim(' | ')}${dim(`update: v${hint.version}`)}` : '';
+    const frame = `${renderStatusLine(snapshot, config)}${suffix}\n`;
     outputFrame(frame);
     return args.intervalMs ?? config.refreshMs;
   }
@@ -161,6 +182,11 @@ async function tick(args: CliArgs): Promise<number> {
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+
+  if (args.updateCheckBg) {
+    await fetchAndCacheLatestVersion(args.updateCheckVersion ?? POWERBAR_VERSION);
+    return;
+  }
 
   if (args.selfCheck) {
     runSelfCheck();

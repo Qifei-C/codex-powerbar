@@ -16,6 +16,12 @@ PREBUILT_RELEASE_REPO="Qifei-C/codex-powerbar"
 PREBUILT_RELEASE_TAG="codex-v0.117.0"
 SOURCE_BUILD_CODEX_REF="main"
 FORCE_SOURCE_BUILD=0
+FORCE_UPDATE=0
+POWERBAR_STATE_DIR="$HOME/.powerbar"
+POWERBAR_RUNTIME_DIR="$POWERBAR_STATE_DIR/dist"
+POWERBAR_MANIFEST_PATH="$POWERBAR_STATE_DIR/manifest.json"
+EXPECTED_STATUS_LINE='status_line = ["model-name", "model-with-reasoning", "current-dir", "project-root", "git-branch", "context-remaining", "context-used", "five-hour-limit", "weekly-limit", "fast-mode", "context-window-size"]'
+EXPECTED_STATUS_CMD='status_line_command = "node '"$HOME"'/.powerbar/dist/index.js --status-line --once --no-clear --cwd \\\"$PWD\\\""'
 
 print_step() {
   printf '\n[install] %s\n' "$1"
@@ -35,6 +41,7 @@ Modes:
   --full             One-shot full install (prebuilt binary, no prompts)
   --source           Build patched codex from source instead of downloading
   --fast             Use faster Rust build profile (thin LTO, only with --source)
+  --force            Rebuild/reinstall all managed components even if unchanged
   --uninstall        Remove patched codex binary, restore config, clean PATH entries
 
 Interactive choices:
@@ -274,6 +281,138 @@ ensure_local_bin_precedence() {
       echo "$marker_end"
     } >> "$rc"
   done
+}
+
+get_repo_powerbar_version() {
+  python3 - "$REPO_DIR/package.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], 'r', encoding='utf8') as handle:
+    print(json.load(handle).get('version', ''))
+PY
+}
+
+read_manifest_field() {
+  local field="$1"
+  if [[ ! -f "$POWERBAR_MANIFEST_PATH" ]]; then
+    return 0
+  fi
+
+  python3 - "$POWERBAR_MANIFEST_PATH" "$field" <<'PY'
+import json
+import sys
+
+try:
+    with open(sys.argv[1], 'r', encoding='utf8') as handle:
+        data = json.load(handle)
+    value = data.get(sys.argv[2], '')
+    if value is None:
+        value = ''
+    print(value)
+except Exception:
+    pass
+PY
+}
+
+write_manifest() {
+  local powerbar_version="$1"
+  local codex_patch_version="$2"
+  local installed_at
+  installed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  mkdir -p "$POWERBAR_STATE_DIR"
+  python3 - "$POWERBAR_MANIFEST_PATH" "$powerbar_version" "$codex_patch_version" "$installed_at" <<'PY'
+import json
+import os
+import sys
+
+manifest_path, powerbar_version, codex_patch_version, installed_at = sys.argv[1:5]
+payload = {
+    'powerbarVersion': powerbar_version,
+    'codexPatchVersion': codex_patch_version,
+    'installedAt': installed_at,
+}
+tmp_path = f'{manifest_path}.tmp'
+with open(tmp_path, 'w', encoding='utf8') as handle:
+    json.dump(payload, handle, indent=2)
+    handle.write('\n')
+os.replace(tmp_path, manifest_path)
+PY
+}
+
+powerbar_runtime_is_current() {
+  local repo_version="$1"
+  [[ "$FORCE_UPDATE" -eq 0 ]] || return 1
+  [[ -f "$POWERBAR_RUNTIME_DIR/index.js" ]] || return 1
+  [[ "$(read_manifest_field powerbarVersion)" == "$repo_version" ]]
+}
+
+codex_patch_is_current() {
+  [[ "$FORCE_UPDATE" -eq 0 ]] || return 1
+  [[ -x "$INSTALL_BIN_DIR/codex" ]] || return 1
+  [[ "$(read_manifest_field codexPatchVersion)" == "$PREBUILT_RELEASE_TAG" ]]
+}
+
+codex_config_is_current() {
+  local config="$HOME/.codex/config.toml"
+  [[ "$FORCE_UPDATE" -eq 0 ]] || return 1
+  [[ -f "$config" ]] || return 1
+
+  local current_cmd
+  current_cmd="$(
+    awk '
+      /^[[:space:]]*status_line_command[[:space:]]*=/ {
+        sub(/^[[:space:]]*/, "", $0)
+        print
+        exit
+      }
+    ' "$config"
+  )"
+  [[ "$current_cmd" == "$EXPECTED_STATUS_CMD" ]] || return 1
+
+  grep -q '^[[:space:]]*status_line[[:space:]]*=' "$config"
+}
+
+ensure_powerbar_runtime() {
+  local repo_version="$1"
+
+  if powerbar_runtime_is_current "$repo_version"; then
+    print_step "Powerbar runtime already at v$repo_version — skipping build/install"
+    return 1
+  fi
+
+  build_hud
+  install_powerbar_cli
+  return 0
+}
+
+ensure_codex_config() {
+  if codex_config_is_current; then
+    print_step "Codex status-line config already current — skipping configure"
+    return 1
+  fi
+
+  configure_codex
+  return 0
+}
+
+ensure_codex_patch() {
+  if codex_patch_is_current; then
+    print_step "Patched codex already at $PREBUILT_RELEASE_TAG — skipping install"
+    verify_installed_codex
+    return 1
+  fi
+
+  if try_download_prebuilt; then
+    verify_installed_codex
+    print_step "Done"
+    echo "Patched codex installed at: $INSTALL_BIN_DIR/codex (prebuilt)"
+  else
+    install_from_source
+  fi
+
+  return 0
 }
 
 is_codex_repo() {
@@ -730,6 +869,10 @@ parse_args() {
         FORCE_SOURCE_BUILD=1
         shift
         ;;
+      --force)
+        FORCE_UPDATE=1
+        shift
+        ;;
       --uninstall)
         uninstall
         exit 0
@@ -979,17 +1122,24 @@ maybe_star_repo() {
 main() {
   parse_args "$@"
 
+  local repo_powerbar_version
+  local manifest_codex_patch_version
+
   if [[ "$INTERACTIVE" -eq 1 ]]; then
     print_step "Starting interactive setup"
   else
     print_step "Starting full install"
   fi
   ensure_command git "git is required (install git first)"
+  ensure_command python3 "python3 is required (install Python 3 first)"
 
   if [[ ! -f "$PATCH_FILE" ]]; then
     echo "Patch file missing: $PATCH_FILE"
     exit 1
   fi
+
+  repo_powerbar_version="$(get_repo_powerbar_version)"
+  manifest_codex_patch_version="$(read_manifest_field codexPatchVersion)"
 
   if [[ "$INTERACTIVE" -eq 1 ]]; then
     interactive_setup
@@ -1000,39 +1150,33 @@ main() {
   fi
 
   if [[ "$ACTION" == "hud-only" ]]; then
-    build_hud
-    install_powerbar_cli
+    ensure_powerbar_runtime "$repo_powerbar_version" || true
+    write_manifest "$repo_powerbar_version" "$manifest_codex_patch_version"
     print_step "Done"
-    echo "HUD rebuilt at: $REPO_DIR/dist/index.js"
-    echo "Powerbar runtime installed at: $HOME/.powerbar/dist/"
+    echo "HUD available at: $REPO_DIR/dist/index.js"
+    echo "Powerbar runtime available at: $POWERBAR_RUNTIME_DIR/"
     maybe_star_repo
     return 0
   fi
 
   if [[ "$ACTION" == "hud-config" ]]; then
-    build_hud
-    install_powerbar_cli
-    configure_codex
+    ensure_powerbar_runtime "$repo_powerbar_version" || true
+    ensure_codex_config || true
+    write_manifest "$repo_powerbar_version" "$manifest_codex_patch_version"
     print_step "Done"
-    echo "HUD rebuilt at: $REPO_DIR/dist/index.js"
-    echo "Powerbar runtime installed at: $HOME/.powerbar/dist/"
+    echo "HUD available at: $REPO_DIR/dist/index.js"
+    echo "Powerbar runtime available at: $POWERBAR_RUNTIME_DIR/"
     echo "HUD command wired in ~/.codex/config.toml via [tui].status_line_command"
     maybe_star_repo
     return 0
   fi
 
   if [[ "$ACTION" == "full" ]]; then
-    build_hud
-    install_powerbar_cli
-    configure_codex
-  fi
-
-  if try_download_prebuilt; then
-    verify_installed_codex
+    ensure_powerbar_runtime "$repo_powerbar_version" || true
+    ensure_codex_config || true
+    ensure_codex_patch || true
+    write_manifest "$repo_powerbar_version" "$PREBUILT_RELEASE_TAG"
     print_step "Done"
-    echo "Patched codex installed at: $INSTALL_BIN_DIR/codex (prebuilt)"
-  else
-    install_from_source
   fi
 
   if [[ "$ACTION" == "full" ]]; then

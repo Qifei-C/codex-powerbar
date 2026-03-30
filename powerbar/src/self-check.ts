@@ -22,6 +22,17 @@ function commandVersion(cmd: string, args: string[]): string {
   return execFileSync(cmd, args, { encoding: 'utf8', timeout: 5000 }).trim();
 }
 
+function readManifest(): { powerbarVersion?: string; codexPatchVersion?: string; installedAt?: string } | null {
+  const manifestPath = path.join(os.homedir(), '.powerbar', 'manifest.json');
+  if (!fs.existsSync(manifestPath)) return null;
+  const raw = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as {
+    powerbarVersion?: string;
+    codexPatchVersion?: string;
+    installedAt?: string;
+  };
+  return raw;
+}
+
 export function runSelfCheck(): void {
   const results: CheckResult[] = [];
 
@@ -66,6 +77,18 @@ export function runSelfCheck(): void {
     const configFile = path.join(dir, 'config.json');
     if (fs.existsSync(configFile)) return `found, config.json exists`;
     return 'found, no config.json';
+  }));
+
+  // ~/.powerbar manifest
+  results.push(check('powerbar manifest', () => {
+    const manifest = readManifest();
+    if (!manifest) return 'manifest.json not found';
+    const details = [
+      manifest.powerbarVersion ? `powerbar v${manifest.powerbarVersion}` : 'powerbar version unknown',
+      manifest.codexPatchVersion ? `patch ${manifest.codexPatchVersion}` : 'patch version unknown',
+      manifest.installedAt ? `installed ${manifest.installedAt}` : 'install time unknown',
+    ];
+    return details.join(', ');
   }));
 
   // sessions directory
