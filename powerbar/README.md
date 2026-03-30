@@ -48,6 +48,7 @@ This is deliberate: the merged snapshot is more accurate than rollout-only, and 
 ```
 
 This is the default interactive flow.
+The installer refuses to run while any Codex session is active, so exit all `codex` processes first.
 
 ### Non-interactive install
 

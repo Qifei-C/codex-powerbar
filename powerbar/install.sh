@@ -32,6 +32,57 @@ fatal() {
   exit 1
 }
 
+capture_process_snapshot() {
+  if [[ -n "${POWERBAR_PS_OUTPUT_OVERRIDE:-}" ]]; then
+    printf '%s\n' "$POWERBAR_PS_OUTPUT_OVERRIDE"
+    return 0
+  fi
+
+  if ps axww -o pid= -o command= >/dev/null 2>&1; then
+    ps axww -o pid= -o command=
+    return 0
+  fi
+
+  if ps -eo pid=,command= >/dev/null 2>&1; then
+    ps -eo pid=,command=
+    return 0
+  fi
+
+  if ps aux >/dev/null 2>&1; then
+    ps aux | awk 'NR > 1 { print }'
+    return 0
+  fi
+
+  if ps auxww >/dev/null 2>&1; then
+    ps auxww | awk 'NR > 1 { print }'
+    return 0
+  fi
+
+  return 1
+}
+
+filter_running_codex_processes() {
+  grep -E '(^|[[:space:]/])codex([[:space:]]|$)|(^|[[:space:]/])codex-cli([[:space:]]|$)|@openai/codex' || true
+}
+
+list_running_codex_processes() {
+  local snapshot
+  snapshot="$(capture_process_snapshot 2>/dev/null || true)"
+  [[ -n "$snapshot" ]] || return 0
+  printf '%s\n' "$snapshot" | filter_running_codex_processes
+}
+
+ensure_codex_not_running() {
+  local running
+  running="$(list_running_codex_processes)"
+  [[ -z "$running" ]] && return 0
+
+  print_step "Refusing to modify Codex while it is running"
+  printf '%s\n' "$running" | sed 's/^/  /'
+  echo ""
+  fatal "Quit all Codex sessions and rerun install.sh. This script replaces/removes the codex binary and updates ~/.codex/config.toml."
+}
+
 print_usage() {
   cat <<'USAGE'
 Usage: ./install.sh [--full] [--source] [--fast] [--uninstall] [--help]
@@ -874,8 +925,9 @@ parse_args() {
         shift
         ;;
       --uninstall)
-        uninstall
-        exit 0
+        ACTION="uninstall"
+        INTERACTIVE=0
+        shift
         ;;
       --help|-h)
         print_usage
@@ -1122,6 +1174,13 @@ maybe_star_repo() {
 main() {
   parse_args "$@"
 
+  if [[ "$ACTION" == "uninstall" ]]; then
+    print_step "Starting uninstall"
+    ensure_codex_not_running
+    uninstall
+    return 0
+  fi
+
   local repo_powerbar_version
   local manifest_codex_patch_version
 
@@ -1137,6 +1196,8 @@ main() {
     echo "Patch file missing: $PATCH_FILE"
     exit 1
   fi
+
+  ensure_codex_not_running
 
   repo_powerbar_version="$(get_repo_powerbar_version)"
   manifest_codex_patch_version="$(read_manifest_field codexPatchVersion)"
@@ -1188,4 +1249,6 @@ main() {
   maybe_star_repo
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
