@@ -449,9 +449,14 @@ try_download_prebuilt() {
   fi
 
   local asset
+  local detected_os detected_arch
+  detected_os="$(uname -s)"
+  detected_arch="$(uname -m)"
   if ! asset="$(detect_platform_asset 2>/dev/null)"; then
-    if [[ "$(uname -s)" == "Darwin" && "$(uname -m)" == "x86_64" ]]; then
+    if [[ "$detected_os" == "Darwin" && "$detected_arch" == "x86_64" ]]; then
       print_step "Prebuilt Intel macOS binary is no longer published — falling back to source build"
+    else
+      print_step "No published prebuilt binary mapping for platform ${detected_os}/${detected_arch} — falling back to source build"
     fi
     return 1
   fi
@@ -461,8 +466,22 @@ try_download_prebuilt() {
   local tmp_dir
   tmp_dir="$(mktemp -d)"
 
-  if ! curl -fSL --max-time 120 -o "$tmp_dir/$asset" "$url" 2>/dev/null; then
-    print_step "Prebuilt binary not available for this platform — falling back to source build"
+  local curl_status=0
+  local http_code
+  http_code="$(curl -sSL --max-time 120 -w '%{http_code}' -o "$tmp_dir/$asset" "$url" 2>/dev/null)" || curl_status=$?
+
+  if [[ "$curl_status" -ne 0 ]]; then
+    if [[ "$http_code" == "404" ]]; then
+      print_step "Prebuilt release asset ${asset} not found in ${PREBUILT_RELEASE_TAG} — falling back to source build"
+    else
+      print_step "Failed to download prebuilt release asset from ${PREBUILT_RELEASE_TAG} (curl exit ${curl_status}, HTTP ${http_code:-000}) — falling back to source build"
+    fi
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+
+  if [[ "$http_code" != "200" ]]; then
+    print_step "Prebuilt release asset ${asset} returned HTTP ${http_code} from ${PREBUILT_RELEASE_TAG} — falling back to source build"
     rm -rf "$tmp_dir"
     return 1
   fi
@@ -517,6 +536,19 @@ try_download_prebuilt() {
 
   print_step "Installed prebuilt patched codex to $target"
   return 0
+}
+
+install_from_source() {
+  local codex_repo
+  codex_repo="$(ensure_codex_repo "$CODEX_REPO_OVERRIDE")"
+  print_step "Using Codex source: $codex_repo"
+
+  apply_patch_if_needed "$codex_repo"
+  build_patched_codex_binary "$codex_repo"
+  verify_installed_codex
+
+  print_step "Done"
+  echo "Patched codex installed at: $INSTALL_BIN_DIR/codex (built from source)"
 }
 
 build_patched_codex_binary() {
@@ -983,19 +1015,8 @@ main() {
     verify_installed_codex
     print_step "Done"
     echo "Patched codex installed at: $INSTALL_BIN_DIR/codex (prebuilt)"
-  elif [[ "$FORCE_SOURCE_BUILD" -eq 1 ]]; then
-    local codex_repo
-    codex_repo="$(ensure_codex_repo "$CODEX_REPO_OVERRIDE")"
-    print_step "Using Codex source: $codex_repo"
-
-    apply_patch_if_needed "$codex_repo"
-    build_patched_codex_binary "$codex_repo"
-    verify_installed_codex
-
-    print_step "Done"
-    echo "Patched codex installed at: $INSTALL_BIN_DIR/codex (built from source)"
   else
-    fatal "Prebuilt binary not available for this platform. Rerun with --source to build from source."
+    install_from_source
   fi
 
   if [[ "$ACTION" == "full" ]]; then
