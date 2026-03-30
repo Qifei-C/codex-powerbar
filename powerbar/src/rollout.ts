@@ -550,9 +550,6 @@ export async function buildSnapshot(rolloutPath: string): Promise<HudSnapshot> {
     snapshot.rateSecondary = defaultRateSecondary ?? sparkRateSecondary;
   }
 
-  // Override with live data from codex env vars (set by patched status_line_command).
-  applyCodexEnvOverrides(snapshot);
-
   return snapshot;
 }
 
