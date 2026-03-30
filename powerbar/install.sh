@@ -11,7 +11,6 @@ INTERACTIVE=1
 ACTION="full"
 CODEX_REPO_OVERRIDE=""
 FAST_BUILD=0
-REFERENCE_CODEX_VERSION=""
 PREBUILT_RELEASE_REPO="Qifei-C/codex-powerbar"
 PREBUILT_RELEASE_TAG="codex-v0.117.0"
 # Keep source builds pinned to the stable upstream release that the patch file targets.
@@ -23,6 +22,8 @@ INSTALL_MUTATED=0
 POWERBAR_STATE_DIR="$HOME/.powerbar"
 POWERBAR_RUNTIME_DIR="$POWERBAR_STATE_DIR/dist"
 POWERBAR_MANIFEST_PATH="$POWERBAR_STATE_DIR/manifest.json"
+INSTALLED_CODEX_PATH=""
+INSTALLED_CODEX_SHA256=""
 EXPECTED_STATUS_LINE='status_line = ["model-name", "model-with-reasoning", "current-dir", "project-root", "git-branch", "context-remaining", "context-used", "five-hour-limit", "weekly-limit", "fast-mode", "context-window-size"]'
 EXPECTED_STATUS_CMD='status_line_command = "node '"$HOME"'/.powerbar/dist/index.js --status-line --once --no-clear --cwd \\\"$PWD\\\""'
 
@@ -150,103 +151,44 @@ ensure_command() {
   fi
 }
 
-parse_codex_version() {
-  local text="$1"
-  if [[ "$text" =~ codex-cli[[:space:]]+([0-9]+(\.[0-9]+){1,2}([-.][A-Za-z0-9.-]+)?) ]]; then
-    printf '%s\n' "${BASH_REMATCH[1]}"
-  fi
-}
+sha256_file() {
+  local file="$1"
+  [[ -f "$file" ]] || return 1
 
-codex_version_from_binary() {
-  local binary="$1"
-  [[ -x "$binary" ]] || return 0
-  local output
-  output="$("$binary" --version 2>/dev/null || true)"
-  parse_codex_version "$output"
-}
-
-find_reference_codex_version() {
-  local -a candidates=()
-  local line
-
-  while IFS= read -r line; do
-    [[ -n "$line" ]] || continue
-    candidates+=("$line")
-  done < <(type -a -p codex 2>/dev/null | awk '!seen[$0]++')
-
-  if [[ -d "$INSTALL_BIN_DIR" ]]; then
-    local backup
-    backup="$(ls -t "$INSTALL_BIN_DIR"/codex.backup.* 2>/dev/null | head -1 || true)"
-    if [[ -n "$backup" ]]; then
-      candidates+=("$backup")
-    fi
-  fi
-
-  local candidate
-  for candidate in "${candidates[@]}"; do
-    [[ -x "$candidate" ]] || continue
-    if [[ "$candidate" == "$INSTALL_BIN_DIR/codex" ]]; then
-      continue
-    fi
-    local version
-    version="$(codex_version_from_binary "$candidate")"
-    if [[ -n "$version" && "$version" != "0.0.0" ]]; then
-      printf '%s\n' "$version"
-      return 0
-    fi
-  done
-
-  # Fallback: query the npm registry for the latest published version.
-  local npm_version
-  npm_version="$(curl -sf --max-time 5 "https://registry.npmjs.org/@openai/codex/latest" 2>/dev/null \
-    | python3 -c "import sys,json; print(json.load(sys.stdin).get('version',''))" 2>/dev/null || true)"
-  if [[ -n "$npm_version" && "$npm_version" != "0.0.0" ]]; then
-    printf '%s\n' "$npm_version"
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$file" | awk '{print $1}'
     return 0
   fi
 
-  return 0
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$file" | awk '{print $1}'
+    return 0
+  fi
+
+  if command -v openssl >/dev/null 2>&1; then
+    openssl dgst -sha256 "$file" | awk '{print $NF}'
+    return 0
+  fi
+
+  fatal "Need shasum, sha256sum, or openssl to verify the installed codex binary"
 }
 
-align_codex_workspace_version() {
+capture_installed_codex_metadata() {
+  local binary="${1:-$INSTALL_BIN_DIR/codex}"
+  [[ -x "$binary" ]] || fatal "Patched codex was built but not installed to $binary"
+
+  INSTALLED_CODEX_PATH="$binary"
+  INSTALLED_CODEX_SHA256="$(sha256_file "$binary")"
+}
+
+codex_repo_matches_source_ref() {
   local codex_repo="$1"
-  local version="$2"
-  [[ -n "$version" ]] || return 0
+  local head_commit
+  local ref_commit
 
-  local cargo_toml="$codex_repo/codex-rs/Cargo.toml"
-  [[ -f "$cargo_toml" ]] || return 0
-
-  local current
-  current="$(
-    awk '
-      $0=="[workspace.package]" { in_section=1; next }
-      /^\[/ && in_section { exit }
-      in_section && $1=="version" && $2=="=" {
-        gsub(/"/, "", $3)
-        print $3
-        exit
-      }
-    ' "$cargo_toml"
-  )"
-
-  if [[ "$current" == "$version" ]]; then
-    return 0
-  fi
-
-  local tmp
-  tmp="$(mktemp)"
-  awk -v v="$version" '
-    BEGIN { in_section=0 }
-    $0=="[workspace.package]" { in_section=1; print; next }
-    /^\[/ && in_section { in_section=0 }
-    in_section && $1=="version" && $2=="=" {
-      print "version = \"" v "\""
-      next
-    }
-    { print }
-  ' "$cargo_toml" > "$tmp"
-  mv "$tmp" "$cargo_toml"
-  print_step "Aligned patched Codex version to $version"
+  head_commit="$(git -C "$codex_repo" rev-parse HEAD 2>/dev/null || true)"
+  ref_commit="$(git -C "$codex_repo" rev-parse "${SOURCE_BUILD_CODEX_REF}^{commit}" 2>/dev/null || true)"
+  [[ -n "$head_commit" && -n "$ref_commit" && "$head_commit" == "$ref_commit" ]]
 }
 
 ensure_rust_toolchain() {
@@ -374,27 +316,35 @@ PY
 manifest_is_current() {
   local powerbar_version="$1"
   local codex_patch_version="$2"
+  local codex_binary_path="${3:-$(read_manifest_field codexBinaryPath)}"
+  local codex_binary_sha256="${4:-$(read_manifest_field codexBinarySha256)}"
   [[ -f "$POWERBAR_MANIFEST_PATH" ]] || return 1
   [[ "$(read_manifest_field powerbarVersion)" == "$powerbar_version" ]] || return 1
-  [[ "$(read_manifest_field codexPatchVersion)" == "$codex_patch_version" ]]
+  [[ "$(read_manifest_field codexPatchVersion)" == "$codex_patch_version" ]] || return 1
+  [[ "$(read_manifest_field codexBinaryPath)" == "$codex_binary_path" ]] || return 1
+  [[ "$(read_manifest_field codexBinarySha256)" == "$codex_binary_sha256" ]]
 }
 
 write_manifest() {
   local powerbar_version="$1"
   local codex_patch_version="$2"
+  local codex_binary_path="$3"
+  local codex_binary_sha256="$4"
   local installed_at
   installed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
   mkdir -p "$POWERBAR_STATE_DIR"
-  python3 - "$POWERBAR_MANIFEST_PATH" "$powerbar_version" "$codex_patch_version" "$installed_at" <<'PY'
+  python3 - "$POWERBAR_MANIFEST_PATH" "$powerbar_version" "$codex_patch_version" "$codex_binary_path" "$codex_binary_sha256" "$installed_at" <<'PY'
 import json
 import os
 import sys
 
-manifest_path, powerbar_version, codex_patch_version, installed_at = sys.argv[1:5]
+manifest_path, powerbar_version, codex_patch_version, codex_binary_path, codex_binary_sha256, installed_at = sys.argv[1:7]
 payload = {
     'powerbarVersion': powerbar_version,
     'codexPatchVersion': codex_patch_version,
+    'codexBinaryPath': codex_binary_path,
+    'codexBinarySha256': codex_binary_sha256,
     'installedAt': installed_at,
 }
 tmp_path = f'{manifest_path}.tmp'
@@ -408,12 +358,21 @@ PY
 ensure_manifest() {
   local powerbar_version="$1"
   local codex_patch_version="$2"
+  local codex_binary_path="${3:-}"
+  local codex_binary_sha256="${4:-}"
 
-  if [[ "$FORCE_UPDATE" -eq 0 ]] && manifest_is_current "$powerbar_version" "$codex_patch_version"; then
+  if [[ -z "$codex_binary_path" ]]; then
+    codex_binary_path="$(read_manifest_field codexBinaryPath)"
+  fi
+  if [[ -z "$codex_binary_sha256" ]]; then
+    codex_binary_sha256="$(read_manifest_field codexBinarySha256)"
+  fi
+
+  if [[ "$FORCE_UPDATE" -eq 0 ]] && manifest_is_current "$powerbar_version" "$codex_patch_version" "$codex_binary_path" "$codex_binary_sha256"; then
     return 1
   fi
 
-  write_manifest "$powerbar_version" "$codex_patch_version"
+  write_manifest "$powerbar_version" "$codex_patch_version" "$codex_binary_path" "$codex_binary_sha256"
   return 0
 }
 
@@ -425,9 +384,25 @@ powerbar_runtime_is_current() {
 }
 
 codex_patch_is_current() {
+  local expected="$INSTALL_BIN_DIR/codex"
+  local manifest_path
+  local manifest_sha
+  local actual_sha
+
   [[ "$FORCE_UPDATE" -eq 0 ]] || return 1
-  [[ -x "$INSTALL_BIN_DIR/codex" ]] || return 1
-  [[ "$(read_manifest_field codexPatchVersion)" == "$PREBUILT_RELEASE_TAG" ]]
+  [[ -x "$expected" ]] || return 1
+  [[ "$(read_manifest_field codexPatchVersion)" == "$PREBUILT_RELEASE_TAG" ]] || return 1
+
+  manifest_path="$(read_manifest_field codexBinaryPath)"
+  manifest_sha="$(read_manifest_field codexBinarySha256)"
+  [[ "$manifest_path" == "$expected" ]] || return 1
+  [[ -n "$manifest_sha" ]] || return 1
+
+  actual_sha="$(sha256_file "$expected")"
+  [[ "$actual_sha" == "$manifest_sha" ]] || return 1
+
+  INSTALLED_CODEX_PATH="$expected"
+  INSTALLED_CODEX_SHA256="$actual_sha"
 }
 
 codex_config_is_current() {
@@ -496,31 +471,30 @@ is_codex_repo() {
   [[ -d "$p/.git" && -f "$p/codex-rs/Cargo.toml" && -f "$p/README.md" ]]
 }
 
-find_codex_repo() {
-  local candidates=(
-    "$REPO_DIR/_upstream/openai-codex"
-    "$REPO_DIR/openai-codex"
-    "$HOME/openai-codex"
-    "$HOME/codex"
-    "$HOME/src/openai-codex"
-    "$HOME/.powerbar/vendor/openai-codex"
-  )
-
-  for c in "${candidates[@]}"; do
-    if is_codex_repo "$c"; then
-      echo "$c"
-      return 0
-    fi
-  done
-
-  return 1
-}
-
 clone_codex_repo() {
   local target="$1"
-  print_step "openai/codex source not found. Cloning to $target" >&2
+  local target_preexisting=0
+  print_step "OpenAI Codex source not found. Cloning $SOURCE_BUILD_CODEX_REF to $target" >&2
+  [[ -e "$target" ]] && target_preexisting=1
   mkdir -p "$(dirname "$target")"
-  git clone --depth 1 https://github.com/openai/codex "$target" >&2
+
+  if git clone --depth 1 --branch "$SOURCE_BUILD_CODEX_REF" https://github.com/openai/codex "$target" >&2; then
+    echo "$target"
+    return 0
+  fi
+
+  if [[ "$target_preexisting" -eq 1 ]]; then
+    fatal "Cannot clone into existing path $target. Choose an empty directory or remove it first."
+  fi
+
+  if [[ -e "$target" ]]; then
+    local backup="${target}.partial.$(date +%Y%m%d%H%M%S)"
+    mv "$target" "$backup"
+    print_step "Initial clone attempt failed. Moved partial checkout to $backup" >&2
+  fi
+
+  git clone https://github.com/openai/codex "$target" >&2
+  git -C "$target" checkout "$SOURCE_BUILD_CODEX_REF" >&2 || fatal "Failed to check out $SOURCE_BUILD_CODEX_REF in $target"
   echo "$target"
 }
 
@@ -536,17 +510,18 @@ is_managed_vendor_repo() {
 refresh_managed_vendor_repo() {
   local target="$1"
 
-  print_step "Managed Codex checkout is stale. Resetting and pulling latest" >&2
-  git -C "$target" checkout -- . >/dev/null 2>&1 || true
+  print_step "Refreshing managed Codex checkout to $SOURCE_BUILD_CODEX_REF" >&2
+  git -C "$target" reset --hard HEAD >/dev/null 2>&1 || true
   git -C "$target" clean -fd >/dev/null 2>&1 || true
-  if git -C "$target" pull --ff-only >&2; then
+  if git -C "$target" fetch --depth 1 origin "$SOURCE_BUILD_CODEX_REF" >&2 \
+    && git -C "$target" checkout --detach FETCH_HEAD >&2 \
+    && git -C "$target" reset --hard FETCH_HEAD >/dev/null 2>&1; then
     echo "$target"
     return 0
   fi
 
-  # Pull failed (e.g. shallow clone conflict) — fall back to re-clone
   local backup="${target}.backup.$(date +%Y%m%d%H%M%S)"
-  print_step "Pull failed. Backing up to $backup and re-cloning" >&2
+  print_step "Refresh failed. Backing up to $backup and re-cloning $SOURCE_BUILD_CODEX_REF" >&2
   mv "$target" "$backup"
   clone_codex_repo "$target" >/dev/null 2>&1
   echo "$target"
@@ -554,13 +529,21 @@ refresh_managed_vendor_repo() {
 
 ensure_codex_repo() {
   local preferred="${1:-}"
+  local managed_repo
+  managed_repo="$(default_vendor_codex_repo)"
 
   if [[ -n "$preferred" ]]; then
     if is_codex_repo "$preferred"; then
-      if [[ "$REPAIR_INSTALL" -eq 1 ]] && is_managed_vendor_repo "$preferred"; then
-        refresh_managed_vendor_repo "$preferred"
-      else
+      if is_managed_vendor_repo "$preferred"; then
+        if [[ "$REPAIR_INSTALL" -eq 1 ]] || ! codex_repo_matches_source_ref "$preferred"; then
+          refresh_managed_vendor_repo "$preferred"
+        else
+          echo "$preferred"
+        fi
+      elif codex_repo_matches_source_ref "$preferred"; then
         echo "$preferred"
+      else
+        fatal "Codex source at $preferred is not pinned to $SOURCE_BUILD_CODEX_REF. Check out that ref or use the managed vendor repo at $managed_repo."
       fi
       return 0
     fi
@@ -568,17 +551,16 @@ ensure_codex_repo() {
     return 0
   fi
 
-  local detected
-  if detected="$(find_codex_repo 2>/dev/null)"; then
-    if [[ "$REPAIR_INSTALL" -eq 1 ]] && is_managed_vendor_repo "$detected"; then
-      refresh_managed_vendor_repo "$detected"
+  if is_codex_repo "$managed_repo"; then
+    if [[ "$REPAIR_INSTALL" -eq 1 ]] || ! codex_repo_matches_source_ref "$managed_repo"; then
+      refresh_managed_vendor_repo "$managed_repo"
     else
-      echo "$detected"
+      echo "$managed_repo"
     fi
     return 0
   fi
 
-  clone_codex_repo "$(default_vendor_codex_repo)"
+  clone_codex_repo "$managed_repo"
 }
 
 apply_patch_if_needed() {
@@ -781,7 +763,6 @@ build_patched_codex_binary() {
 
   ensure_rust_toolchain
   ensure_linux_build_deps
-  align_codex_workspace_version "$codex_repo" "$REFERENCE_CODEX_VERSION"
 
   local cargo_profile="release"
   local cargo_flags=("--release")
@@ -864,9 +845,7 @@ verify_installed_codex() {
   local expected="$INSTALL_BIN_DIR/codex"
   local resolved
 
-  if [[ ! -x "$expected" ]]; then
-    fatal "Patched codex was built but not installed to $expected"
-  fi
+  capture_installed_codex_metadata "$expected"
 
   resolved="$(command -v codex 2>/dev/null || true)"
   if [[ "$resolved" == "$expected" ]]; then
@@ -902,17 +881,18 @@ interactive_setup() {
   esac
 
   if [[ "$ACTION" == "full" && "$FORCE_SOURCE_BUILD" -eq 1 ]]; then
-    local detected=""
-    if detected="$(find_codex_repo 2>/dev/null)"; then
-      echo "[install] Detected Codex source: $detected"
+    local managed_repo
+    managed_repo="$(default_vendor_codex_repo)"
+    if is_codex_repo "$managed_repo"; then
+      echo "[install] Detected managed Codex source: $managed_repo"
       if confirm_prompt "Use this checkout?" "Y"; then
-        CODEX_REPO_OVERRIDE="$detected"
+        CODEX_REPO_OVERRIDE="$managed_repo"
       else
-        CODEX_REPO_OVERRIDE="$(prompt_with_default "Codex source path to use or clone into" "$HOME/.powerbar/vendor/openai-codex")"
+        CODEX_REPO_OVERRIDE="$(prompt_with_default "Codex source path to use or clone into (must target $SOURCE_BUILD_CODEX_REF)" "$managed_repo")"
       fi
     else
-      echo "[install] No local Codex source checkout detected."
-      CODEX_REPO_OVERRIDE="$(prompt_with_default "Clone Codex source into" "$HOME/.powerbar/vendor/openai-codex")"
+      echo "[install] No managed Codex source checkout detected."
+      CODEX_REPO_OVERRIDE="$(prompt_with_default "Clone Codex source into" "$managed_repo")"
     fi
   fi
 
@@ -991,7 +971,6 @@ detect_existing_codex() {
   existing="$(command -v codex 2>/dev/null || true)"
   if [[ -z "$existing" ]]; then
     INSTALL_BIN_DIR="$HOME/.local/bin"
-    REFERENCE_CODEX_VERSION="$(find_reference_codex_version)"
     return 0
   fi
 
@@ -1019,7 +998,6 @@ detect_existing_codex() {
   # Already our patched binary in ~/.local/bin
   if [[ "$existing_dir" == "$INSTALL_BIN_DIR" ]]; then
     print_step "Detected existing Powerbar patched binary at $existing (will be replaced)"
-    REFERENCE_CODEX_VERSION="$(find_reference_codex_version)"
     return 0
   fi
 
@@ -1052,7 +1030,6 @@ detect_existing_codex() {
     fi
   fi
 
-  REFERENCE_CODEX_VERSION="$(find_reference_codex_version)"
 }
 
 uninstall() {
@@ -1296,7 +1273,7 @@ main() {
     if ensure_codex_patch; then
       INSTALL_MUTATED=1
     fi
-    ensure_manifest "$repo_powerbar_version" "$PREBUILT_RELEASE_TAG" || true
+    ensure_manifest "$repo_powerbar_version" "$PREBUILT_RELEASE_TAG" "$INSTALLED_CODEX_PATH" "$INSTALLED_CODEX_SHA256" || true
     print_step "Done"
   fi
 

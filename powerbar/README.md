@@ -6,6 +6,16 @@ It is built around the `status_line_command` path: keep the high-signal session 
 
 ![Powerbar full terminal capture](docs/assets/terminal-full.png)
 
+## Default vs Powerbar
+
+Before:
+
+![Default Codex footer capture](docs/assets/codex-default.png)
+
+After:
+
+![Powerbar full terminal capture](docs/assets/terminal-full.png)
+
 ## What It Is
 
 Powerbar combines three things:

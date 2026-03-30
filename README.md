@@ -6,6 +6,16 @@ It keeps the session state you actually care about in the line you already watch
 
 ![Powerbar full terminal capture](powerbar/docs/assets/terminal-full.png)
 
+## Default vs Powerbar
+
+Before:
+
+![Default Codex footer capture](powerbar/docs/assets/codex-default.png)
+
+After:
+
+![Powerbar full terminal capture](powerbar/docs/assets/terminal-full.png)
+
 ## Why Powerbar
 
 Codex's built-in footer is intentionally minimal. That works for short prompts. It gets thin once the session is doing real work across multiple turns, tools, files, and rate windows.
