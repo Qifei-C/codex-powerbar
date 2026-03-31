@@ -1564,103 +1564,6 @@ index eda37fe..e8377e2 100644
      pub(crate) fn set_status_line_enabled(&mut self, enabled: bool) {
          if self.composer.set_status_line_enabled(enabled) {
              self.request_redraw();
-diff --git a/codex-rs/tui/src/bottom_pane/powerbar_setup.rs b/codex-rs/tui/src/bottom_pane/powerbar_setup.rs
-new file mode 100644
-index 0000000..c8af3a7
---- /dev/null
-+++ b/codex-rs/tui/src/bottom_pane/powerbar_setup.rs
-@@ -0,0 +1,91 @@
-+//! Powerbar configuration view for customizing HUD-specific display options.
-+
-+use ratatui::buffer::Buffer;
-+use ratatui::layout::Rect;
-+use ratatui::text::Line;
-+
-+use crate::app_event::AppEvent;
-+use crate::app_event_sender::AppEventSender;
-+use crate::bottom_pane::CancellationEvent;
-+use crate::bottom_pane::bottom_pane_view::BottomPaneView;
-+use crate::bottom_pane::multi_select_picker::MultiSelectItem;
-+use crate::bottom_pane::multi_select_picker::MultiSelectPicker;
-+use crate::render::renderable::Renderable;
-+
-+const SHOW_DETAILS_ID: &str = "show-details";
-+
-+fn preview_line(items: &[MultiSelectItem]) -> Option<Line<'static>> {
-+    let show_details = items
-+        .iter()
-+        .any(|item| item.id == SHOW_DETAILS_ID && item.enabled);
-+    let preview = if show_details {
-+        "HUD details enabled"
-+    } else {
-+        "HUD details hidden"
-+    };
-+    Some(Line::from(preview))
-+}
-+
-+pub(crate) struct PowerbarSetupView {
-+    picker: MultiSelectPicker,
-+}
-+
-+impl PowerbarSetupView {
-+    pub(crate) fn new(show_details: bool, app_event_tx: AppEventSender) -> Self {
-+        let items = vec![MultiSelectItem {
-+            id: SHOW_DETAILS_ID.to_string(),
-+            name: SHOW_DETAILS_ID.to_string(),
-+            description: Some(
-+                "Show HUD-only details like duration, approvals, plan, tool summary, and extra badges."
-+                    .to_string(),
-+            ),
-+            enabled: show_details,
-+        }];
-+
-+        Self {
-+            picker: MultiSelectPicker::builder(
-+                "Configure Powerbar".to_string(),
-+                Some("Select which HUD-specific details to display.".to_string()),
-+                app_event_tx,
-+            )
-+            .instructions(vec![
-+                "Use ↑↓ to navigate, space to select, enter to confirm, esc to cancel.".into(),
-+            ])
-+            .items(items)
-+            .on_preview(preview_line)
-+            .on_confirm(|ids, app_event| {
-+                let show_details = ids.iter().any(|id| id == SHOW_DETAILS_ID);
-+                app_event.send(AppEvent::PowerbarSetup { show_details });
-+            })
-+            .on_cancel(|app_event| {
-+                app_event.send(AppEvent::PowerbarSetupCancelled);
-+            })
-+            .build(),
-+        }
-+    }
-+}
-+
-+impl BottomPaneView for PowerbarSetupView {
-+    fn handle_key_event(&mut self, key_event: crossterm::event::KeyEvent) {
-+        self.picker.handle_key_event(key_event);
-+    }
-+
-+    fn is_complete(&self) -> bool {
-+        self.picker.complete
-+    }
-+
-+    fn on_ctrl_c(&mut self) -> CancellationEvent {
-+        self.picker.close();
-+        CancellationEvent::Handled
-+    }
-+}
-+
-+impl Renderable for PowerbarSetupView {
-+    fn render(&self, area: Rect, buf: &mut Buffer) {
-+        self.picker.render(area, buf)
-+    }
-+
-+    fn desired_height(&self, width: u16) -> u16 {
-+        self.picker.desired_height(width)
-+    }
-+}
 diff --git a/codex-rs/tui/src/chatwidget.rs b/codex-rs/tui/src/chatwidget.rs
 index 68497f4..b481d04 100644
 --- a/codex-rs/tui/src/chatwidget.rs
@@ -2178,3 +2081,388 @@ index ec624d3..c01abce 100644
              SlashCommand::Statusline => false,
              SlashCommand::Theme => false,
              SlashCommand::Title => false,
+diff --git a/codex-rs/tui_app_server/src/app.rs b/codex-rs/tui_app_server/src/app.rs
+index 95e231b..27ca02d 100644
+--- a/codex-rs/tui_app_server/src/app.rs
++++ b/codex-rs/tui_app_server/src/app.rs
+@@ -5026,6 +5026,16 @@ impl App {
+             AppEvent::StatusLineSetupCancelled => {
+                 self.chat_widget.cancel_status_line_setup();
+             }
++            AppEvent::StatusLineCommandUpdated { cwd, value } => {
++                self.chat_widget.set_status_line_command_value(cwd, value);
++                self.refresh_status_line();
++            }
++            AppEvent::PowerbarSetup { show_details: _ } => {
++                self.refresh_status_line();
++            }
++            AppEvent::PowerbarSetupCancelled => {
++                self.chat_widget.cancel_powerbar_setup();
++            }
+             AppEvent::TerminalTitleSetup { items } => {
+                 let ids = items.iter().map(ToString::to_string).collect::<Vec<_>>();
+                 let edit = codex_core::config::edit::terminal_title_items_edit(&ids);
+diff --git a/codex-rs/tui_app_server/src/app_event.rs b/codex-rs/tui_app_server/src/app_event.rs
+index e6d8bde..426e5b4 100644
+--- a/codex-rs/tui_app_server/src/app_event.rs
++++ b/codex-rs/tui_app_server/src/app_event.rs
+@@ -547,6 +547,17 @@ pub(crate) enum AppEvent {
+     },
+     /// Dismiss the status-line setup UI without changing config.
+     StatusLineSetupCancelled,
++    /// Async update of external status line command output.
++    StatusLineCommandUpdated {
++        cwd: PathBuf,
++        value: Option<String>,
++    },
++    /// Apply a user-confirmed Powerbar configuration update.
++    PowerbarSetup {
++        show_details: bool,
++    },
++    /// Dismiss the Powerbar setup UI without changing config.
++    PowerbarSetupCancelled,
+ 
+     /// Apply a user-confirmed terminal-title item ordering/selection.
+     TerminalTitleSetup {
+diff --git a/codex-rs/tui_app_server/src/chatwidget.rs b/codex-rs/tui_app_server/src/chatwidget.rs
+index 636349a..6e8cead 100644
+--- a/codex-rs/tui_app_server/src/chatwidget.rs
++++ b/codex-rs/tui_app_server/src/chatwidget.rs
+@@ -376,8 +376,72 @@ use codex_protocol::protocol::SandboxPolicy;
+ use codex_utils_approval_presets::ApprovalPreset;
+ use codex_utils_approval_presets::builtin_approval_presets;
+ use strum::IntoEnumIterator;
++use tokio::process::Command;
+ use unicode_segmentation::UnicodeSegmentation;
+ 
++const STATUS_LINE_COMMAND_TIMEOUT: Duration = Duration::from_millis(500);
++const STATUS_LINE_COMMAND_MAX_LINES: usize = 4;
++const STATUS_LINE_COMMAND_MAX_CHARS_PER_LINE: usize = 220;
++
++fn truncate_status_line_line(line: &str) -> String {
++    if line.chars().count() <= STATUS_LINE_COMMAND_MAX_CHARS_PER_LINE {
++        return line.to_string();
++    }
++    let truncated = line
++        .chars()
++        .take(STATUS_LINE_COMMAND_MAX_CHARS_PER_LINE.saturating_sub(1))
++        .collect::<String>();
++    format!("{truncated}…")
++}
++
++fn sanitize_status_line_output(text: &str) -> Option<String> {
++    let lines = text
++        .lines()
++        .map(str::trim)
++        .filter(|line| !line.is_empty())
++        .take(STATUS_LINE_COMMAND_MAX_LINES)
++        .map(truncate_status_line_line)
++        .collect::<Vec<_>>();
++
++    if lines.is_empty() {
++        return None;
++    }
++
++    Some(lines.join("\n"))
++}
++
++async fn run_status_line_command(
++    command_text: &str,
++    cwd: &Path,
++    env_vars: Vec<(String, String)>,
++) -> Option<String> {
++    let mut command = if cfg!(windows) {
++        let mut cmd = Command::new("cmd");
++        cmd.arg("/C").arg(command_text);
++        cmd
++    } else {
++        let mut cmd = Command::new("sh");
++        cmd.arg("-lc").arg(command_text);
++        cmd
++    };
++    command.current_dir(cwd);
++    for (key, value) in &env_vars {
++        command.env(key, value);
++    }
++    command.stdout(std::process::Stdio::piped());
++    command.stderr(std::process::Stdio::null());
++
++    let output = match tokio::time::timeout(STATUS_LINE_COMMAND_TIMEOUT, command.output()).await {
++        Ok(Ok(out)) => out,
++        _ => return None,
++    };
++    if !output.status.success() {
++        return None;
++    }
++    let text = String::from_utf8_lossy(&output.stdout);
++    sanitize_status_line_output(&text)
++}
++
+ const USER_SHELL_COMMAND_HELP_TITLE: &str = "Prefix a command with ! to run it locally";
+ const USER_SHELL_COMMAND_HELP_HINT: &str = "Example: !ls";
+ const DEFAULT_OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
+@@ -932,6 +996,12 @@ pub(crate) struct ChatWidget {
+     status_line_branch_pending: bool,
+     // True once we've attempted a branch lookup for the current CWD.
+     status_line_branch_lookup_complete: bool,
++    // Cached output of external status-line command.
++    status_line_command_value: Option<String>,
++    // CWD used for the external command lookup.
++    status_line_command_cwd: Option<PathBuf>,
++    // True while an async command execution is in flight.
++    status_line_command_pending: bool,
+     external_editor_state: ExternalEditorState,
+     realtime_conversation: RealtimeConversationUiState,
+     last_rendered_user_message_event: Option<RenderedUserMessageEvent>,
+@@ -1846,6 +1916,23 @@ impl ChatWidget {
+         self.refresh_status_surfaces();
+     }
+ 
++    /// Stores async external status-line command output for the current cwd.
++    pub(crate) fn set_status_line_command_value(&mut self, cwd: PathBuf, value: Option<String>) {
++        if self.status_line_command_cwd.as_ref() != Some(&cwd) {
++            self.status_line_command_pending = false;
++            return;
++        }
++        // Keep the previous value if the command failed/timed out to avoid flashing.
++        if value.is_some() {
++            self.status_line_command_value = value;
++        }
++        self.status_line_command_pending = false;
++    }
++
++    pub(crate) fn cancel_powerbar_setup(&self) {
++        tracing::info!("Powerbar setup canceled by user");
++    }
++
+     fn collect_runtime_metrics_delta(&mut self) {
+         if let Some(delta) = self.session_telemetry.runtime_metrics_summary() {
+             self.apply_runtime_metrics_delta(delta);
+@@ -4551,6 +4638,9 @@ impl ChatWidget {
+             status_line_branch_cwd: None,
+             status_line_branch_pending: false,
+             status_line_branch_lookup_complete: false,
++            status_line_command_value: None,
++            status_line_command_cwd: None,
++            status_line_command_pending: false,
+             external_editor_state: ExternalEditorState::Closed,
+             realtime_conversation: RealtimeConversationUiState::default(),
+             last_rendered_user_message_event: None,
+@@ -4568,7 +4658,14 @@ impl ChatWidget {
+             .set_audio_device_selection_enabled(widget.realtime_audio_device_selection_enabled());
+         widget
+             .bottom_pane
+-            .set_status_line_enabled(!widget.configured_status_line_items().is_empty());
++            .set_status_line_enabled(
++                !widget.configured_status_line_items().is_empty()
++                    || widget
++                        .config
++                        .tui_status_line_command
++                        .as_ref()
++                        .is_some_and(|cmd| !cmd.trim().is_empty()),
++            );
+         widget
+             .bottom_pane
+             .set_collaboration_modes_enabled(/*enabled*/ true);
+diff --git a/codex-rs/tui_app_server/src/chatwidget/status_surfaces.rs b/codex-rs/tui_app_server/src/chatwidget/status_surfaces.rs
+index d80003c..2fc0f97 100644
+--- a/codex-rs/tui_app_server/src/chatwidget/status_surfaces.rs
++++ b/codex-rs/tui_app_server/src/chatwidget/status_surfaces.rs
+@@ -135,25 +135,52 @@ impl ChatWidget {
+     }
+ 
+     fn refresh_status_line_from_selections(&mut self, selections: &StatusSurfaceSelections) {
+-        let enabled = !selections.status_line_items.is_empty();
++        let has_external_command = self
++            .config
++            .tui_status_line_command
++            .as_ref()
++            .is_some_and(|cmd| !cmd.trim().is_empty());
++        let enabled = !selections.status_line_items.is_empty() || has_external_command;
+         self.bottom_pane.set_status_line_enabled(enabled);
+         if !enabled {
+             self.set_status_line(/*status_line*/ None);
+             return;
+         }
+ 
+-        let mut parts = Vec::new();
++        let cwd = self.status_line_cwd().to_path_buf();
++        if has_external_command {
++            self.sync_status_line_command_state(&cwd);
++            if !self.status_line_command_pending {
++                self.request_status_line_command(cwd);
++            }
++        } else {
++            self.status_line_command_value = None;
++            self.status_line_command_pending = false;
++        }
++
++        let mut builtin_parts = Vec::new();
+         for item in &selections.status_line_items {
+             if let Some(value) = self.status_line_value_for_item(item) {
+-                parts.push(value);
++                builtin_parts.push(value);
+             }
+         }
+ 
+-        let line = if parts.is_empty() {
++        let builtin_line = if builtin_parts.is_empty() {
+             None
+         } else {
+-            Some(Line::from(parts.join(" · ")))
++            Some(builtin_parts.join(" · "))
++        };
++
++        // When an external command produces output, it is the sole status-line
++        // content — the configured items are passed to it via CODEX_STATUS_LINE_ITEMS
++        // so the external command can render them in its own style.
++        let combined = match (self.status_line_command_value.clone(), builtin_line) {
++            (Some(cmd_output), _) => Some(cmd_output),
++            (None, Some(builtin)) => Some(builtin),
++            (None, None) => None,
+         };
++
++        let line = combined.as_ref().map(|s| Line::from(s.clone()));
+         self.set_status_line(line);
+     }
+ 
+@@ -413,6 +440,139 @@ impl ChatWidget {
+         });
+     }
+ 
++    /// Resets external status-line command state when cwd changes.
++    fn sync_status_line_command_state(&mut self, cwd: &Path) {
++        if self
++            .status_line_command_cwd
++            .as_ref()
++            .is_some_and(|path| path == cwd)
++        {
++            return;
++        }
++        self.status_line_command_cwd = Some(cwd.to_path_buf());
++        self.status_line_command_value = None;
++        self.status_line_command_pending = false;
++    }
++
++    /// Collects codex runtime data as env vars for the external status command.
++    fn status_line_command_env_vars(&mut self) -> Vec<(String, String)> {
++        let mut vars = Vec::new();
++        if let Some(pct) = self.status_line_context_used_percent() {
++            vars.push(("CODEX_CONTEXT_USED_PCT".into(), pct.to_string()));
++        }
++        if let Some(remaining) = self.status_line_context_remaining_percent() {
++            vars.push(("CODEX_CONTEXT_REMAINING_PCT".into(), remaining.to_string()));
++        }
++        if let Some(window) = self.status_line_context_window_size() {
++            vars.push(("CODEX_CONTEXT_WINDOW".into(), window.to_string()));
++        }
++        let context_usage = self.token_info
++            .as_ref()
++            .map(|info| info.last_token_usage.tokens_in_context_window())
++            .unwrap_or(0);
++        if context_usage > 0 {
++            vars.push(("CODEX_CONTEXT_USED_TOKENS".into(), context_usage.to_string()));
++        }
++        let total_usage = self.status_line_total_usage();
++        let total_used = total_usage.tokens_in_context_window();
++        if total_used > 0 {
++            vars.push(("CODEX_TOTAL_CONTEXT_TOKENS".into(), total_used.to_string()));
++        }
++        vars.push(("CODEX_MODEL".into(), self.model_display_name().to_string()));
++        let effort_label = Self::status_line_reasoning_effort_label(self.effective_reasoning_effort());
++        vars.push(("CODEX_REASONING_EFFORT".into(), effort_label.to_string()));
++        if matches!(self.config.service_tier, Some(ServiceTier::Fast)) {
++            vars.push(("CODEX_FAST".into(), "1".into()));
++        }
++
++        let rate_snapshot = self.rate_limit_snapshots_by_limit_id.get("codex")
++            .or_else(|| self.rate_limit_snapshots_by_limit_id.values().next());
++        if let Some(snapshot) = rate_snapshot {
++            if let Some(ref primary) = snapshot.primary {
++                vars.push(("CODEX_RATE_PRIMARY_PCT".into(), format!("{:.0}", primary.used_percent)));
++                if let Some(ref resets) = primary.resets_at {
++                    vars.push(("CODEX_RATE_PRIMARY_RESETS".into(), resets.clone()));
++                }
++                if let Some(mins) = primary.window_minutes {
++                    vars.push(("CODEX_RATE_PRIMARY_WINDOW_MIN".into(), mins.to_string()));
++                }
++            }
++            if let Some(ref secondary) = snapshot.secondary {
++                vars.push(("CODEX_RATE_SECONDARY_PCT".into(), format!("{:.0}", secondary.used_percent)));
++                if let Some(ref resets) = secondary.resets_at {
++                    vars.push(("CODEX_RATE_SECONDARY_RESETS".into(), resets.clone()));
++                }
++                if let Some(mins) = secondary.window_minutes {
++                    vars.push(("CODEX_RATE_SECONDARY_WINDOW_MIN".into(), mins.to_string()));
++                }
++            }
++        }
++
++        vars.push(("CODEX_APPROVAL_POLICY".into(), self.config.permissions.approval_policy.value().to_string()));
++        vars.push(("CODEX_SANDBOX_MODE".into(), format!("{:?}", self.config.permissions.sandbox_policy.get())));
++        vars.push(("CODEX_APPROVALS_REVIEWER".into(), self.config.approvals_reviewer.to_string()));
++
++        vars.push(("CODEX_TURN_STATE".into(), if self.agent_turn_running { "running" } else { "idle" }.into()));
++
++        if let Some(thread_id) = self.thread_id {
++            vars.push(("CODEX_SESSION_ID".into(), thread_id.to_string()));
++        }
++        vars.push(("CODEX_CLI_VERSION".into(), CODEX_CLI_VERSION.to_string()));
++
++        if let Some((completed, total)) = self.last_plan_progress {
++            vars.push(("CODEX_PLAN_COMPLETED".into(), completed.to_string()));
++            vars.push(("CODEX_PLAN_TOTAL".into(), total.to_string()));
++        }
++
++        vars.push(("CODEX_RUNNING_TOOLS".into(), self.running_commands.len().to_string()));
++
++        let total_usage = self.status_line_total_usage();
++        vars.push(("CODEX_TOTAL_INPUT_TOKENS".into(), total_usage.input_tokens.to_string()));
++        vars.push(("CODEX_TOTAL_OUTPUT_TOKENS".into(), total_usage.output_tokens.to_string()));
++
++        let mut features: Vec<&str> = Vec::new();
++        if self.config.features.enabled(Feature::GuardianApproval) {
++            features.push("guardian-approvals");
++        }
++        if self.config.features.enabled(Feature::PreventIdleSleep) {
++            features.push("prevent-sleep");
++        }
++        if !features.is_empty() {
++            vars.push(("CODEX_FEATURES".into(), features.join(",")));
++        }
++
++        if let Some(width) = self.last_rendered_width.get() {
++            vars.push(("COLUMNS".into(), width.to_string()));
++        }
++
++        vars.push(("CODEX_COLLABORATION_MODE".into(), format!("{:?}", self.active_mode_kind())));
++
++        let items = self.configured_status_line_items();
++        vars.push(("CODEX_STATUS_LINE_ITEMS".into(), items.join(",")));
++
++        vars
++    }
++
++    /// Starts an async external status-line command execution unless one is running.
++    fn request_status_line_command(&mut self, cwd: PathBuf) {
++        if self.status_line_command_pending {
++            return;
++        }
++        let Some(command_text) = self.config.tui_status_line_command.clone() else {
++            return;
++        };
++        if command_text.trim().is_empty() {
++            return;
++        }
++        let env_vars = self.status_line_command_env_vars();
++        self.status_line_command_pending = true;
++        let tx = self.app_event_tx.clone();
++        tokio::spawn(async move {
++            let value = run_status_line_command(&command_text, &cwd, env_vars).await;
++            tx.send(AppEvent::StatusLineCommandUpdated { cwd, value });
++        });
++    }
++
+     /// Resolves a display string for one configured status-line item.
+     ///
+     /// Returning `None` means "omit this item for now", not "configuration error". Callers rely on
