@@ -626,6 +626,9 @@ install_powerbar_cli() {
   mkdir -p "$install_dir"
   find "$install_dir" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
   cp -R "$REPO_DIR/dist/"* "$install_dir/"
+  # Ensure package.json (with "type": "module") is present so Node
+  # recognises ESM imports on older runtimes (e.g. Node 18).
+  cp "$REPO_DIR/package.json" "$install_dir/package.json"
   print_step "Installed powerbar runtime to $install_dir"
 }
 
