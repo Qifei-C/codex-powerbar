@@ -1564,6 +1564,103 @@ index eda37fe..e8377e2 100644
      pub(crate) fn set_status_line_enabled(&mut self, enabled: bool) {
          if self.composer.set_status_line_enabled(enabled) {
              self.request_redraw();
+diff --git a/codex-rs/tui/src/bottom_pane/powerbar_setup.rs b/codex-rs/tui/src/bottom_pane/powerbar_setup.rs
+new file mode 100644
+index 0000000..c8af3a7
+--- /dev/null
++++ b/codex-rs/tui/src/bottom_pane/powerbar_setup.rs
+@@ -0,0 +1,91 @@
++//! Powerbar configuration view for customizing HUD-specific display options.
++
++use ratatui::buffer::Buffer;
++use ratatui::layout::Rect;
++use ratatui::text::Line;
++
++use crate::app_event::AppEvent;
++use crate::app_event_sender::AppEventSender;
++use crate::bottom_pane::CancellationEvent;
++use crate::bottom_pane::bottom_pane_view::BottomPaneView;
++use crate::bottom_pane::multi_select_picker::MultiSelectItem;
++use crate::bottom_pane::multi_select_picker::MultiSelectPicker;
++use crate::render::renderable::Renderable;
++
++const SHOW_DETAILS_ID: &str = "show-details";
++
++fn preview_line(items: &[MultiSelectItem]) -> Option<Line<'static>> {
++    let show_details = items
++        .iter()
++        .any(|item| item.id == SHOW_DETAILS_ID && item.enabled);
++    let preview = if show_details {
++        "HUD details enabled"
++    } else {
++        "HUD details hidden"
++    };
++    Some(Line::from(preview))
++}
++
++pub(crate) struct PowerbarSetupView {
++    picker: MultiSelectPicker,
++}
++
++impl PowerbarSetupView {
++    pub(crate) fn new(show_details: bool, app_event_tx: AppEventSender) -> Self {
++        let items = vec![MultiSelectItem {
++            id: SHOW_DETAILS_ID.to_string(),
++            name: SHOW_DETAILS_ID.to_string(),
++            description: Some(
++                "Show HUD-only details like duration, approvals, plan, tool summary, and extra badges."
++                    .to_string(),
++            ),
++            enabled: show_details,
++        }];
++
++        Self {
++            picker: MultiSelectPicker::builder(
++                "Configure Powerbar".to_string(),
++                Some("Select which HUD-specific details to display.".to_string()),
++                app_event_tx,
++            )
++            .instructions(vec![
++                "Use ↑↓ to navigate, space to select, enter to confirm, esc to cancel.".into(),
++            ])
++            .items(items)
++            .on_preview(preview_line)
++            .on_confirm(|ids, app_event| {
++                let show_details = ids.iter().any(|id| id == SHOW_DETAILS_ID);
++                app_event.send(AppEvent::PowerbarSetup { show_details });
++            })
++            .on_cancel(|app_event| {
++                app_event.send(AppEvent::PowerbarSetupCancelled);
++            })
++            .build(),
++        }
++    }
++}
++
++impl BottomPaneView for PowerbarSetupView {
++    fn handle_key_event(&mut self, key_event: crossterm::event::KeyEvent) {
++        self.picker.handle_key_event(key_event);
++    }
++
++    fn is_complete(&self) -> bool {
++        self.picker.complete
++    }
++
++    fn on_ctrl_c(&mut self) -> CancellationEvent {
++        self.picker.close();
++        CancellationEvent::Handled
++    }
++}
++
++impl Renderable for PowerbarSetupView {
++    fn render(&self, area: Rect, buf: &mut Buffer) {
++        self.picker.render(area, buf)
++    }
++
++    fn desired_height(&self, width: u16) -> u16 {
++        self.picker.desired_height(width)
++    }
++}
 diff --git a/codex-rs/tui/src/chatwidget.rs b/codex-rs/tui/src/chatwidget.rs
 index 68497f4..b481d04 100644
 --- a/codex-rs/tui/src/chatwidget.rs
@@ -2103,10 +2200,10 @@ index 95e231b..27ca02d 100644
                  let ids = items.iter().map(ToString::to_string).collect::<Vec<_>>();
                  let edit = codex_core::config::edit::terminal_title_items_edit(&ids);
 diff --git a/codex-rs/tui_app_server/src/app_event.rs b/codex-rs/tui_app_server/src/app_event.rs
-index e6d8bde..426e5b4 100644
+index e6d8bde..8222f36 100644
 --- a/codex-rs/tui_app_server/src/app_event.rs
 +++ b/codex-rs/tui_app_server/src/app_event.rs
-@@ -547,6 +547,17 @@ pub(crate) enum AppEvent {
+@@ -547,6 +547,19 @@ pub(crate) enum AppEvent {
      },
      /// Dismiss the status-line setup UI without changing config.
      StatusLineSetupCancelled,
@@ -2116,10 +2213,12 @@ index e6d8bde..426e5b4 100644
 +        value: Option<String>,
 +    },
 +    /// Apply a user-confirmed Powerbar configuration update.
++    #[allow(dead_code)]
 +    PowerbarSetup {
 +        show_details: bool,
 +    },
 +    /// Dismiss the Powerbar setup UI without changing config.
++    #[allow(dead_code)]
 +    PowerbarSetupCancelled,
  
      /// Apply a user-confirmed terminal-title item ordering/selection.
